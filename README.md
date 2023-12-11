@@ -1,2 +1,3 @@
-# advent-of-code-2023
-My advent of code solutions in Rust.
+# Advent of Code 2023
+
+My <https://adventofcode.com/2023> solutions in Rust.
