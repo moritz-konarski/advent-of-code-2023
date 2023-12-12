@@ -77,28 +77,14 @@ fn part1(filename: &str) -> u32 {
 }
 
 fn get_required_powers(line: &String) -> u32 {
-    let (game, draws) = line.split_once(GAME_DELIM).unwrap();
+    let (_, draws) = line.split_once(GAME_DELIM).unwrap();
+    let mut counter = Counts::new();
 
-    for draw in draws.split(DRAW_DELIM) {
-        for color_draw in draw.splitn(3, COLOR_DELIM) {
-            let (count, color) = color_draw.split_once(COUNT_DELIM).unwrap();
+    draws
+        .split(DRAW_DELIM)
+        .for_each(|draw| counter.update_max(draw));
 
-            let count = u32::from_str_radix(count, 10).expect("should work");
-            let limit = match color {
-                RED => COUNTS.red,
-                BLUE => COUNTS.blue,
-                GREEN => COUNTS.green,
-                _ => unreachable!("there are no other colors"),
-            };
-
-            if count > limit {
-                return 0;
-            }
-        }
-    }
-
-    let (_, id) = game.split_once(COUNT_DELIM).unwrap();
-    u32::from_str_radix(id, 10).expect("should work")
+    counter.power()
 }
 
 fn part2(filename: &str) -> u32 {
@@ -128,11 +114,39 @@ fn part2_example() {
 
 #[test]
 fn part2_puzzle() {
-    assert_eq!(2286, part2(PART2_FILE));
+    assert_eq!(78111, part2(PART2_FILE));
 }
 
 struct Counts {
     red: u32,
     green: u32,
     blue: u32,
+}
+
+impl Counts {
+    fn new() -> Self {
+        Counts {
+            red: 0,
+            green: 0,
+            blue: 0,
+        }
+    }
+
+    fn power(self) -> u32 {
+        self.red * self.green * self.blue
+    }
+
+    fn update_max(&mut self, draw: &str) {
+        for color_draw in draw.splitn(3, COLOR_DELIM) {
+            let (count, color) = color_draw.split_once(COUNT_DELIM).unwrap();
+
+            let count = u32::from_str_radix(count, 10).expect("should work");
+            match color {
+                RED => self.red = self.red.max(count),
+                BLUE => self.blue = self.blue.max(count),
+                GREEN => self.green = self.green.max(count),
+                _ => unreachable!("there are no other colors"),
+            };
+        }
+    }
 }
