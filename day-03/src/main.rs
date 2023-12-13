@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -28,84 +27,47 @@ fn main() {
     }
 }
 
-// TODO: decide on one approach and stick to it
-
-struct ParseLine {
-    text: &str,
-
-}
-
-impl ParseLine {
-    fn new() -> Self;
-}
-
-struct ThreeLines {
-    previous_line: ParseLine;
-    current_line: ParseLine;
-    next_line: ParseLine;
-}
-
-impl ThreeLines {
-    fn new() -> Self {
-        
-    }
-    
-}
-
 fn part1(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    let mut previous_line: (&str, &[bool]) = ("", &vec![]);
-    let mut current_line: (&str, &[bool]) = ("", &vec![]);
-    let mut next_line: (&str, &[bool]) = ("", &vec![]);
+    // get tuples for lines
+    let mut previous_line: (String, Vec<bool>) = (String::new(), Vec::new());
+    let mut current_line: (String, Vec<bool>) = (String::new(), Vec::new());
+    let mut next_line: Vec<bool> = Vec::new();
 
-    for (line_number, line) in file.lines().enumerate() {
-        let line = line.as_ref().unwrap().as_bytes();
+    // iter over all lines
+    for line in file.lines() {
+        current_line.0 = line.unwrap();
 
         // TODO: remove
-        println!(
-            "Line {line_number}: {:?}",
-            std::str::from_utf8(&line).expect("should work")
-        );
-        if line.is_empty() {
-            break;
-        }
+        println!("{:?}", current_line.0);
 
-        let line_len = line.len();
-        let mut column = 0;
-        while column < line_len {
-            match line[column] {
+        let mut index = 0;
+        while index < current_line.0.len() {
+            match current_line.0.as_bytes()[index] {
                 PERIOD_AS_BYTE => { /* we ignore periods */ }
                 ZERO_AS_BYTE..=NINE_AS_BYTE => {
-                    // all numbers need to be processed
-
-                    let start = column;
-                    column += 1;
+                    let start = index;
+                    index += 1;
                     // while we have digits, increment column
-                    while column < line_len
-                        && line[column] >= ZERO_AS_BYTE
-                        && line[column] <= NINE_AS_BYTE
+                    while index < current_line.0.len()
+                        && current_line.0.as_bytes()[index] >= ZERO_AS_BYTE
+                        && current_line.0.as_bytes()[index] <= NINE_AS_BYTE
                     {
-                        column += 1;
+                        index += 1;
                     }
-                    let end = column;
+                    let end = index;
 
                     // extract the number
                     let mut num = 0;
                     for (count, index) in (start..end).into_iter().rev().enumerate() {
-                        num += 10_u32.pow(count as u32) * (line[index] - ZERO_AS_BYTE) as u32;
+                        num += 10_u32.pow(count as u32)
+                            * (current_line.0.as_bytes()[index] - ZERO_AS_BYTE) as u32;
                     }
 
                     // TODO: remove
                     println!("{num}");
-
-                    num_positions.push(NumberPosition {
-                        num,
-                        line: line_number,
-                        start,
-                        end,
-                    });
                 }
                 _ => {
                     // everything else is treated as a symbol
@@ -113,28 +75,19 @@ fn part1(filename: &str) -> u32 {
                     // each symbol creates 3 three-ranges of legal nums above, below and on the same line
                     println!(
                         "{:?}",
-                        char::from_u32(line[column] as u32).expect("cannot fail")
+                        char::from_u32(current_line.0.as_bytes()[index] as u32)
+                            .expect("cannot fail")
                     );
-                    sym_positions.push(SymbolPosition {
-                        line: line_number,
-                        position: column,
-                    });
                 }
             }
 
-            column += 1;
+            index += 1;
+            previous_line = current_line.clone();
+            current_line.1 = next_line.clone();
+            next_line = Vec::with_capacity(next_line.len());
         }
     }
-
-    let map = SymbolMap::from_positions(sym_positions);
-
-    num_positions.into_iter().fold(0, |sum, pos| {
-        if let Some(num) = map.get(&pos) {
-            sum + num
-        } else {
-            sum
-        }
-    })
+    0
 }
 
 fn part2(filename: &str) -> u32 {
