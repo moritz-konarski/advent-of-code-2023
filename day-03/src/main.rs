@@ -24,7 +24,49 @@ fn main() {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+struct Number {
+    val: u32,
+    start: usize,
+    end: usize,
+}
+
+impl Number {
+    fn parse(line: &String) -> Vec<Self> {
+        let mut nums = vec![];
+        let mut iter = line.chars().enumerate();
+
+        while let Some((mut index, mut letter)) = iter.next() {
+            if !letter.is_digit(10) {
+                continue;
+            }
+
+            let start = index;
+            let mut digits = vec![];
+            while letter.is_digit(10) {
+                digits.push(letter);
+
+                match iter.next() {
+                    Some((x, y)) => {
+                        index = x;
+                        letter = y;
+                    }
+                    None => break,
+                }
+            }
+
+            nums.push(Number {
+                val: digits.iter().collect::<String>().parse::<u32>().unwrap(),
+                start,
+                end: index,
+            });
+        }
+
+        return nums;
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Symbol {
     sym: char,
     index: usize,
@@ -32,222 +74,113 @@ struct Symbol {
 }
 
 impl Symbol {
-    fn new(sym: char, index: usize) -> Self {
-        Self {
-            sym,
-            index,
-            numbers: vec![],
+    fn parse(line: &String) -> Vec<Self> {
+        let mut syms = vec![];
+
+        for (index, sym) in line.chars().enumerate() {
+            match sym {
+                '.' | '0'..='9' => { /* not symbols */ }
+                _ => syms.push(Self {
+                    sym,
+                    index,
+                    numbers: vec![],
+                }),
+            }
         }
+
+        return syms;
     }
 
-    fn sum_symbol_adjacent(&self) -> u32 {
-        let mut sum = 0;
-        let mut iter = self
-            .chars
-            .iter()
-            .zip(&self.is_digit)
-            .zip(&self.adjacent_sym);
-
-        while let Some(((mut letter, mut is_digit), mut symbol_count)) = iter.next() {
-            if !is_digit {
-                continue;
-            }
-
-            let mut num_counts = 0;
-            let mut nums: Vec<char> = vec![];
-            while *is_digit {
-                nums.push(*letter);
-                num_counts += *symbol_count;
-
-                match iter.next() {
-                    Some(((x, y), z)) => {
-                        letter = x;
-                        is_digit = y;
-                        symbol_count = z;
-                    }
-                    None => break,
-                }
-            }
-
-            if num_counts > 0 {
-                sum += nums.iter().collect::<String>().parse::<u32>().unwrap();
-            }
-        }
-
-        return sum;
+    fn sum(&self) -> u32 {
+        self.numbers.iter().sum()
     }
 
-    fn sum_gear_adjacent(&self) -> u32 {
-        let mut prod = 1;
-        let mut iter = self
-            .chars
-            .iter()
-            .zip(&self.is_digit)
-            .zip(&self.adjacent_gear);
+    fn product(&self) -> u32 {
+        self.numbers.iter().product()
+    }
 
-        while let Some(((mut letter, mut is_digit), mut gear_count)) = iter.next() {
-            if !is_digit {
-                continue;
-            }
-
-            let mut num_counts = 0;
-            let mut nums: Vec<char> = vec![];
-            while *is_digit {
-                nums.push(*letter);
-                num_counts += *gear_count;
-
-                match iter.next() {
-                    Some(((x, y), z)) => {
-                        letter = x;
-                        is_digit = y;
-                        gear_count = z;
-                    }
-                    None => break,
-                }
-            }
-
-            if num_counts > 0 {
-                prod *= nums.iter().collect::<String>().parse::<u32>().unwrap();
-            }
+    fn is_adjacent_to(&self, num: &Number) -> bool {
+        if self.index >= num.start && self.index <= num.end {
+            return true;
         }
 
-        return prod;
+        if num.start > 0 && self.index == num.start - 1 {
+            return true;
+        }
+
+        return false;
+    }
+
+    fn add_num(&mut self, num: &Number) {
+        self.numbers.push(num.val);
     }
 }
 
 struct SymbolData {
-    prev: Vec<Symbol>,
-    curr: Vec<Symbol>,
-    next: Vec<Symbol>,
+    prev_sym: Vec<Symbol>,
+    prev_num: Vec<Number>,
+    curr_sym: Vec<Symbol>,
+    curr_num: Vec<Number>,
 }
 
 impl SymbolData {
     fn new() -> Self {
         Self {
-            prev: vec![],
-            curr: vec![],
-            next: vec![],
+            prev_sym: vec![],
+            prev_num: vec![],
+            curr_sym: vec![],
+            curr_num: vec![],
         }
     }
 
     fn parse(&mut self, line: String) {
-        self.curr.parse_line(line);
+        // parse numbers from current line
+        self.curr_num = Number::parse(&line);
+
+        // add current nums to previous symbols
+        for sym in self.prev_sym.iter_mut() {
+            for num in &self.curr_num {
+                if sym.is_adjacent_to(&num) {
+                    sym.add_num(num);
+                } else if num.start > sym.index {
+                    break;
+                }
+            }
+        }
+
+        // parse symbols from current line
+        self.curr_sym = Symbol::parse(&line);
+
+        // add previous and current nums to current symbols
+        for sym in self.curr_sym.iter_mut() {
+            for num in &self.prev_num {
+                if sym.is_adjacent_to(&num) {
+                    sym.add_num(&num);
+                } else if num.start > sym.index {
+                    break;
+                }
+            }
+
+            for num in &self.curr_num {
+                if sym.is_adjacent_to(&num) {
+                    sym.add_num(&num);
+                } else if num.start > sym.index {
+                    break;
+                }
+            }
+        }
     }
 
     fn shift_left(&mut self) {
-        self.prev = self.curr.clone();
-        self.curr = self.next.clone();
-        self.next = vec![];
+        self.prev_sym = self.curr_sym.clone();
+        self.prev_num = self.curr_num.clone();
+        self.curr_sym = vec![];
+        self.curr_num = vec![];
     }
 
-    fn update_adj_sym(&mut self, indices: Vec<usize>) {
-        let len = self.curr.adjacent_sym.len() - 1;
-        indices
-            .iter()
-            .map(|i| {
-                let i = *i;
-                if i == 0 {
-                    i..i + 2
-                } else if i == len {
-                    i - 1..i + 1
-                } else {
-                    i - 1..i + 2
-                }
-            })
-            .for_each(|r| {
-                for i in r {
-                    self.prev.adjacent_sym[i] += 1;
-                    self.curr.adjacent_sym[i] += 1;
-                    self.next.adjacent_sym[i] += 1;
-                }
-            });
+    fn sum_all(&self) -> u32 {
+        self.prev_sym.iter().map(|s| s.sum()).sum()
     }
-
-    fn update_adj_gear(&mut self, indices: Vec<usize>) {
-        let len = self.curr.adjacent_gear.len() - 1;
-        indices
-            .iter()
-            .map(|i| {
-                let i = *i;
-                if i == 0 {
-                    i..i + 2
-                } else if i == len {
-                    i - 1..i + 1
-                } else {
-                    i - 1..i + 2
-                }
-            })
-            .for_each(|r| {
-                for i in r {
-                    self.prev.adjacent_gear[i] += 1;
-                    self.curr.adjacent_gear[i] += 1;
-                    self.next.adjacent_gear[i] += 1;
-                }
-            });
-    }
-
-    fn process_all(&mut self) {
-        let symbols_indices = self
-            .curr
-            .chars
-            .iter()
-            .zip(&self.curr.is_digit)
-            .enumerate()
-            .filter_map(
-                |(i, (c, is_d))| {
-                    if *is_d || *c == '.' {
-                        None
-                    } else {
-                        Some(i)
-                    }
-                },
-            )
-            .collect();
-        self.update_adj_sym(symbols_indices);
-    }
-
-    fn process_numbers(&mut self) {
-        let number_indices = self
-            .curr
-            .is_digit
-            .iter()
-            .enumerate()
-            .filter_map(|(i, is_d)| if *is_d { Some(i) } else { None })
-            .collect();
-        self.update_adj_sym(number_indices);
-    }
-
-    fn process_gears(&mut self) {
-        let number_indices = self
-            .prev
-            .chars
-            .iter()
-            .zip(&self.prev.adjacent_sym)
-            .enumerate()
-            .filter_map(|(i, (c, sym_count))| {
-                if *c == '*' && *sym_count == 2 {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        self.update_adj_gear(number_indices);
-    }
-
-    fn sum(&self) -> u32 {
-        self.prev.sum_symbol_adjacent()
-    }
-
-    fn sum_gears(&self) -> u32 {
-        self.prev.sum_gear_adjacent()
-    }
-}
-
-fn get_line_len(filename: &str) -> usize {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
-    file.lines().next().unwrap().unwrap().len()
 }
 
 fn part1(filename: &str) -> u32 {
@@ -259,32 +192,16 @@ fn part1(filename: &str) -> u32 {
 
     for line in file.lines() {
         symbol_data.parse(line.unwrap());
-        symbol_data.process_all();
-        sum += symbol_data.sum();
+        sum += symbol_data.sum_all();
         symbol_data.shift_left();
     }
 
-    sum + symbol_data.sum()
+    sum + symbol_data.sum_all()
 }
 
-// fn part2(filename: &str) -> u32 {
-//     let line_len = get_line_len(filename);
-//     let file = File::open(filename).expect("Should be able to read the file");
-//     let file = BufReader::new(file);
-
-//     let mut sum = 0;
-//     let mut line_data = LineData::new(line_len);
-
-//     for line in file.lines() {
-//         line_data.parse(line.unwrap());
-//         line_data.process_numbers();
-//         line_data.process_gears();
-//         sum += line_data.sum_gears();
-//         line_data.shift_left();
-//     }
-
-//     sum + line_data.sum_numbers()
-// }
+fn part2(filename: &str) -> u32 {
+    0
+}
 
 #[test]
 fn part1_example() {
