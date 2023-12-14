@@ -181,6 +181,19 @@ impl SymbolData {
     fn sum_all(&self) -> u32 {
         self.prev_sym.iter().map(|s| s.sum()).sum()
     }
+
+    fn sum_gears(&self) -> u32 {
+        self.prev_sym
+            .iter()
+            .filter_map(|s| {
+                if s.sym == '*' && s.numbers.len() == 2 {
+                    Some(s.product())
+                } else {
+                    None
+                }
+            })
+            .sum()
+    }
 }
 
 fn part1(filename: &str) -> u32 {
@@ -200,7 +213,19 @@ fn part1(filename: &str) -> u32 {
 }
 
 fn part2(filename: &str) -> u32 {
-    0
+    let file = File::open(filename).expect("Should be able to read the file");
+    let file = BufReader::new(file);
+
+    let mut sum = 0;
+    let mut symbol_data = SymbolData::new();
+
+    for line in file.lines() {
+        symbol_data.parse(line.unwrap());
+        sum += symbol_data.sum_gears();
+        symbol_data.shift_left();
+    }
+
+    sum + symbol_data.sum_all()
 }
 
 #[test]
@@ -213,12 +238,12 @@ fn part1_puzzle() {
     assert_eq!(550064, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(467835, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(467835, part2("test2.txt"));
+}
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(78111, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(85010461, part2(PART2_FILE));
+}
