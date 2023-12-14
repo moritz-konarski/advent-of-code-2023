@@ -2,9 +2,6 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-const PERIOD_AS_BYTE: u8 = 0x2E;
-const ZERO_AS_BYTE: u8 = 0x30;
-const NINE_AS_BYTE: u8 = 0x39;
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
 
@@ -27,85 +24,267 @@ fn main() {
     }
 }
 
-fn process_previous_line(line: &(Vec<u8>, Vec<bool>), line_len: usize) -> u32 {
-    let mut num_counts = false;
-    let mut sum = 0;
-    let mut i = 0;
+#[derive(Clone)]
+struct Symbol {
+    sym: char,
+    index: usize,
+    numbers: Vec<u32>,
+}
 
-    while i < line_len {
-        if !(ZERO_AS_BYTE..=NINE_AS_BYTE).contains(&line.0[i]) {
-            i += 1;
-            continue;
-        }
-
-        let start = i;
-        while i < line_len && line.0[i] >= ZERO_AS_BYTE && line.0[i] <= NINE_AS_BYTE {
-            num_counts |= line.1[i];
-            i += 1;
-        }
-        let end = i;
-
-        if num_counts {
-            num_counts = false;
-            for (count, ii) in (start..end).into_iter().rev().enumerate() {
-                sum += 10_u32.pow(count as u32) * (line.0[ii] - ZERO_AS_BYTE) as u32;
-            }
+impl Symbol {
+    fn new(sym: char, index: usize) -> Self {
+        Self {
+            sym,
+            index,
+            numbers: vec![],
         }
     }
 
-    return sum;
-}
+    fn sum_symbol_adjacent(&self) -> u32 {
+        let mut sum = 0;
+        let mut iter = self
+            .chars
+            .iter()
+            .zip(&self.is_digit)
+            .zip(&self.adjacent_sym);
 
-fn part1(filename: &str) -> u32 {
-    // this is really dirty, but it comes in handy
-    let file = BufReader::new(File::open(filename).expect("Should be able to read the file"));
-    let line_len = file.lines().next().unwrap().unwrap().len();
-    let file = BufReader::new(File::open(filename).expect("Should be able to read the file"));
-
-    let mut previous_line = (vec![0; line_len], vec![false; line_len]);
-    let mut current_line = (vec![0; line_len], vec![false; line_len]);
-    let mut next_line = vec![false; line_len];
-
-    let mut sum = 0;
-
-    for line in file.lines() {
-        current_line.0 = line.unwrap().as_bytes().to_vec();
-
-        for (i, c) in current_line.0.iter().enumerate() {
-            if *c == PERIOD_AS_BYTE || (ZERO_AS_BYTE..=NINE_AS_BYTE).contains(c) {
+        while let Some(((mut letter, mut is_digit), mut symbol_count)) = iter.next() {
+            if !is_digit {
                 continue;
             }
 
-            for ii in 0.max(i - 1)..line_len.min(i + 2) {
-                previous_line.1[ii] |= true;
-                current_line.1[ii] |= true;
-                next_line[ii] |= true;
+            let mut num_counts = 0;
+            let mut nums: Vec<char> = vec![];
+            while *is_digit {
+                nums.push(*letter);
+                num_counts += *symbol_count;
+
+                match iter.next() {
+                    Some(((x, y), z)) => {
+                        letter = x;
+                        is_digit = y;
+                        symbol_count = z;
+                    }
+                    None => break,
+                }
+            }
+
+            if num_counts > 0 {
+                sum += nums.iter().collect::<String>().parse::<u32>().unwrap();
             }
         }
 
-        sum += process_previous_line(&previous_line, line_len);
-
-        previous_line = current_line.to_owned();
-        current_line.1 = next_line;
-        next_line = vec![false; line_len];
+        return sum;
     }
 
-    sum + process_previous_line(&previous_line, line_len)
+    fn sum_gear_adjacent(&self) -> u32 {
+        let mut prod = 1;
+        let mut iter = self
+            .chars
+            .iter()
+            .zip(&self.is_digit)
+            .zip(&self.adjacent_gear);
+
+        while let Some(((mut letter, mut is_digit), mut gear_count)) = iter.next() {
+            if !is_digit {
+                continue;
+            }
+
+            let mut num_counts = 0;
+            let mut nums: Vec<char> = vec![];
+            while *is_digit {
+                nums.push(*letter);
+                num_counts += *gear_count;
+
+                match iter.next() {
+                    Some(((x, y), z)) => {
+                        letter = x;
+                        is_digit = y;
+                        gear_count = z;
+                    }
+                    None => break,
+                }
+            }
+
+            if num_counts > 0 {
+                prod *= nums.iter().collect::<String>().parse::<u32>().unwrap();
+            }
+        }
+
+        return prod;
+    }
 }
 
-fn part2(filename: &str) -> u32 {
+struct SymbolData {
+    prev: Vec<Symbol>,
+    curr: Vec<Symbol>,
+    next: Vec<Symbol>,
+}
+
+impl SymbolData {
+    fn new() -> Self {
+        Self {
+            prev: vec![],
+            curr: vec![],
+            next: vec![],
+        }
+    }
+
+    fn parse(&mut self, line: String) {
+        self.curr.parse_line(line);
+    }
+
+    fn shift_left(&mut self) {
+        self.prev = self.curr.clone();
+        self.curr = self.next.clone();
+        self.next = vec![];
+    }
+
+    fn update_adj_sym(&mut self, indices: Vec<usize>) {
+        let len = self.curr.adjacent_sym.len() - 1;
+        indices
+            .iter()
+            .map(|i| {
+                let i = *i;
+                if i == 0 {
+                    i..i + 2
+                } else if i == len {
+                    i - 1..i + 1
+                } else {
+                    i - 1..i + 2
+                }
+            })
+            .for_each(|r| {
+                for i in r {
+                    self.prev.adjacent_sym[i] += 1;
+                    self.curr.adjacent_sym[i] += 1;
+                    self.next.adjacent_sym[i] += 1;
+                }
+            });
+    }
+
+    fn update_adj_gear(&mut self, indices: Vec<usize>) {
+        let len = self.curr.adjacent_gear.len() - 1;
+        indices
+            .iter()
+            .map(|i| {
+                let i = *i;
+                if i == 0 {
+                    i..i + 2
+                } else if i == len {
+                    i - 1..i + 1
+                } else {
+                    i - 1..i + 2
+                }
+            })
+            .for_each(|r| {
+                for i in r {
+                    self.prev.adjacent_gear[i] += 1;
+                    self.curr.adjacent_gear[i] += 1;
+                    self.next.adjacent_gear[i] += 1;
+                }
+            });
+    }
+
+    fn process_all(&mut self) {
+        let symbols_indices = self
+            .curr
+            .chars
+            .iter()
+            .zip(&self.curr.is_digit)
+            .enumerate()
+            .filter_map(
+                |(i, (c, is_d))| {
+                    if *is_d || *c == '.' {
+                        None
+                    } else {
+                        Some(i)
+                    }
+                },
+            )
+            .collect();
+        self.update_adj_sym(symbols_indices);
+    }
+
+    fn process_numbers(&mut self) {
+        let number_indices = self
+            .curr
+            .is_digit
+            .iter()
+            .enumerate()
+            .filter_map(|(i, is_d)| if *is_d { Some(i) } else { None })
+            .collect();
+        self.update_adj_sym(number_indices);
+    }
+
+    fn process_gears(&mut self) {
+        let number_indices = self
+            .prev
+            .chars
+            .iter()
+            .zip(&self.prev.adjacent_sym)
+            .enumerate()
+            .filter_map(|(i, (c, sym_count))| {
+                if *c == '*' && *sym_count == 2 {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.update_adj_gear(number_indices);
+    }
+
+    fn sum(&self) -> u32 {
+        self.prev.sum_symbol_adjacent()
+    }
+
+    fn sum_gears(&self) -> u32 {
+        self.prev.sum_gear_adjacent()
+    }
+}
+
+fn get_line_len(filename: &str) -> usize {
+    let file = File::open(filename).expect("Should be able to read the file");
+    let file = BufReader::new(file);
+    file.lines().next().unwrap().unwrap().len()
+}
+
+fn part1(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    file.lines().fold(0, |sum, line| {
-        let l = line.unwrap();
-        if l.is_empty() {
-            return sum;
-        }
+    let mut sum = 0;
+    let mut symbol_data = SymbolData::new();
 
-        sum + 1
-    })
+    for line in file.lines() {
+        symbol_data.parse(line.unwrap());
+        symbol_data.process_all();
+        sum += symbol_data.sum();
+        symbol_data.shift_left();
+    }
+
+    sum + symbol_data.sum()
 }
+
+// fn part2(filename: &str) -> u32 {
+//     let line_len = get_line_len(filename);
+//     let file = File::open(filename).expect("Should be able to read the file");
+//     let file = BufReader::new(file);
+
+//     let mut sum = 0;
+//     let mut line_data = LineData::new(line_len);
+
+//     for line in file.lines() {
+//         line_data.parse(line.unwrap());
+//         line_data.process_numbers();
+//         line_data.process_gears();
+//         sum += line_data.sum_gears();
+//         line_data.shift_left();
+//     }
+
+//     sum + line_data.sum_numbers()
+// }
 
 #[test]
 fn part1_example() {
@@ -119,7 +298,7 @@ fn part1_puzzle() {
 
 // #[test]
 // fn part2_example() {
-//     assert_eq!(2286, part2("test2.txt"));
+//     assert_eq!(467835, part2("test2.txt"));
 // }
 
 // #[test]
