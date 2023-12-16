@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -25,25 +25,33 @@ fn main() {
     }
 }
 
+fn get_common_nums(line: &String) -> usize {
+    let (_, numbers) = line.split_once(':').unwrap();
+    let (winning_nums, our_nums) = numbers.split_once('|').unwrap();
+
+    let winning_set = winning_nums.split_whitespace().collect::<HashSet<&str>>();
+    let our_set = our_nums.split_whitespace().collect::<HashSet<&str>>();
+
+    winning_set.intersection(&our_set).count()
+}
+
+fn get_score(line: &String) -> u32 {
+    let common_num_count = get_common_nums(line) as u32;
+    if common_num_count == 0 {
+        0
+    } else {
+        1 << (common_num_count - 1)
+    }
+}
+
 fn part1(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
     file.lines().fold(0, |sum, line| {
         let line = line.unwrap();
-        let (_, numbers) = line.split_once(':').unwrap();
-        let (winning_nums, our_nums) = numbers.split_once('|').unwrap();
 
-        let winning_set = winning_nums.split_whitespace().collect::<HashSet<&str>>();
-        let our_set = our_nums.split_whitespace().collect::<HashSet<&str>>();
-
-        let common_num_count = winning_set.intersection(&our_set).count();
-
-        if common_num_count == 0 {
-            sum
-        } else {
-            sum + (1 << (common_num_count - 1))
-        }
+        sum + get_score(&line)
     })
 }
 
@@ -51,7 +59,22 @@ fn part2(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    0
+    let mut card_copies: HashMap<usize, u32> = HashMap::new();
+
+    file.lines().enumerate().fold(0, |sum, (card_num, line)| {
+        let line = line.unwrap();
+
+        let copies_of_this_card = *card_copies.get(&card_num).unwrap_or(&1);
+
+        let common_nums = get_common_nums(&line);
+        if common_nums > 0 {
+            for index in (card_num + 1)..(card_num + common_nums + 1) {
+                *card_copies.entry(index).or_insert(1) += copies_of_this_card;
+            }
+        }
+
+        sum + copies_of_this_card
+    })
 }
 
 #[test]
@@ -64,12 +87,12 @@ fn part1_puzzle() {
     assert_eq!(25174, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(467835, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(30, part2("test2.txt"));
+}
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(85010461, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(6420979, part2(PART2_FILE));
+}
