@@ -46,45 +46,56 @@ impl RangeMap {
             .insert(source_start, (dest_start, length));
     }
 
-    fn get(&self, seed: usize) -> usize {
+    fn get(&self, seed: (&usize, &usize)) -> (usize, usize) {
+        let (seed, len) = seed;
         let mapping = self
             .range_to_dest
             .iter()
             .find(|(source_start, (_, length))| {
-                **source_start <= seed && seed < **source_start + length
+                *source_start <= seed && *seed < *source_start + length
             });
 
         match mapping {
-            Some((source_start, (dest_start, _))) => dest_start + seed - source_start,
-            None => seed,
+            Some((source_start, (dest_start, _))) => (dest_start + seed - source_start, *len),
+            None => (*seed, *len),
         }
     }
 }
 
-fn get_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<usize> {
+fn get_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, usize> {
     let line = lines.next().unwrap().unwrap();
     let (_, seeds) = line.split_once(':').unwrap();
 
     seeds
         .split_whitespace()
-        .map(|s| s.parse().unwrap())
+        .map(|s| (s.parse().unwrap(), 1))
         .collect()
 }
 
-fn part1(filename: &str) -> u32 {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
+fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, usize> {
+    let line = lines.next().unwrap().unwrap();
+    let (_, seeds) = line.split_once(':').unwrap();
 
-    let mut lines = file.lines();
+    let seeds: Vec<usize> = seeds
+        .split_whitespace()
+        .map(|s| s.parse().unwrap())
+        .collect();
 
-    // extract seeds and consume that line
-    let mut seed_list = get_seeds(&mut lines);
-    // skip the following empty line
-    lines.next();
+    seeds
+        .chunks_exact(2)
+        .map(|chunk| (chunk[0], chunk[1]))
+        .collect()
+}
+
+fn iterate_seed_list(
+    lines: &mut Lines<BufReader<File>>,
+    seed_list: BTreeMap<usize, usize>,
+) -> BTreeMap<usize, usize> {
+    let mut seed_list = seed_list;
 
     while let Some(Ok(mut line)) = lines.next() {
         // skip lines that indicate a description
-        if line.ends_with(':') {
+        if line.ends_with(':') || line.is_empty() {
             continue;
         }
 
@@ -100,18 +111,42 @@ fn part1(filename: &str) -> u32 {
         }
 
         // use map to process seeds stuff
-        seed_list = seed_list.iter().map(|item| map.get(*item)).collect();
+        seed_list = seed_list.iter().map(|e| map.get(e)).collect();
     }
 
+    seed_list
+}
+
+fn part1(filename: &str) -> u32 {
+    let file = File::open(filename).expect("Should be able to read the file");
+    let file = BufReader::new(file);
+
+    let mut lines = file.lines();
+
+    // extract seeds and consume that line
+    let seed_list = get_seeds(&mut lines);
+
+    // get final seed list
+    let final_seeds = iterate_seed_list(&mut lines, seed_list);
+
     // find smallest value
-    *seed_list.iter().min().unwrap() as u32
+    *final_seeds.keys().nth(0).unwrap() as u32
 }
 
 fn part2(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    file.lines().fold(0, |sum, line| sum)
+    let mut lines = file.lines();
+
+    // extract seeds and consume that line
+    let seed_list = get_range_seeds(&mut lines);
+
+    // get final seed list
+    let final_seeds = iterate_seed_list(&mut lines, seed_list);
+
+    // find smallest value
+    *final_seeds.keys().nth(0).unwrap() as u32
 }
 
 #[test]
@@ -124,10 +159,10 @@ fn part1_puzzle() {
     assert_eq!(227653707, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(30, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(46, part2("test2.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
