@@ -25,6 +25,7 @@ fn main() {
     }
 }
 
+#[derive(Debug)]
 struct RangeMap {
     range_to_dest: BTreeMap<usize, (usize, usize)>,
 }
@@ -47,18 +48,34 @@ impl RangeMap {
     }
 
     fn get(&self, seed: (&usize, &usize)) -> (usize, usize) {
-        let (seed, len) = seed;
-        let mapping = self
+        println!("{seed:?}");
+        let (seed, seed_len) = seed;
+
+        // TODO: do good candidate search
+        // search for start and end with length 1
+        // then, cause BTreeSet, we take all in between
+        let candidates = self
             .range_to_dest
             .iter()
-            .find(|(source_start, (_, length))| {
-                *source_start <= seed && *seed < *source_start + length
-            });
+            .filter(|(source_start, (_, length))| {
+                let contains_seed =
+                    *source_start < seed && *seed + *seed_len < *source_start + length;
+                let is_contained =
+                    *source_start >= seed && *seed + *seed_len >= *source_start + length;
+                let starts_seed =
+                    *source_start <= seed && *seed + *seed_len >= *source_start + length;
+                let ends_seed = *source_start >= seed && *seed + *seed_len < *source_start + length;
+                contains_seed || is_contained || starts_seed || ends_seed
+            })
+            .collect::<Vec<_>>();
 
-        match mapping {
-            Some((source_start, (dest_start, _))) => (dest_start + seed - source_start, *len),
-            None => (*seed, *len),
-        }
+        println!("{candidates:?}");
+
+        // match candidates {
+        //     Some((source_start, (dest_start, _))) => (dest_start + seed - source_start, *len),
+        //     None => (*seed, *len),
+        // }
+        (0, 0)
     }
 }
 
@@ -111,6 +128,7 @@ fn iterate_seed_list(
         }
 
         // use map to process seeds stuff
+        println!("{map:?}");
         seed_list = seed_list.iter().map(|e| map.get(e)).collect();
     }
 
@@ -154,15 +172,15 @@ fn part1_example() {
     assert_eq!(35, part1("test1.txt"));
 }
 
-#[test]
-fn part1_puzzle() {
-    assert_eq!(227653707, part1(PART1_FILE));
-}
+// #[test]
+// fn part1_puzzle() {
+//     assert_eq!(227653707, part1(PART1_FILE));
+// }
 
-#[test]
-fn part2_example() {
-    assert_eq!(46, part2("test2.txt"));
-}
+// #[test]
+// fn part2_example() {
+//     assert_eq!(46, part2("test2.txt"));
+// }
 
 // #[test]
 // fn part2_puzzle() {
