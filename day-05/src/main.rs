@@ -26,88 +26,168 @@ fn main() {
 }
 
 #[derive(Debug)]
+struct SeedRange {
+    dst_start: usize,
+    src_start: usize,
+    len: usize,
+}
+
+impl SeedRange {
+    fn new(dst_start: usize, src_start: usize, len: usize) -> Self {
+        Self {
+            dst_start,
+            src_start,
+            len,
+        }
+    }
+
+    fn get(&self, index: usize) -> usize {
+        self.dst_start + index - self.src_start
+    }
+
+    fn contains(&self, other: &Self) -> bool {
+        self.src_start <= other.src_start
+            && other.src_start + other.len <= self.src_start + self.len
+    }
+
+    fn contains_point(&self, point: usize) -> bool {
+        self.src_start <= point && self.src_start + self.len > point
+    }
+
+    fn is_contained_in(&self, other: &Self) -> bool {
+        other.contains(self)
+    }
+
+    fn intersects(&self, other: &Self) -> bool {
+        let self_then_other = other.contains_point(self.src_start + self.len)
+            && !other.contains_point(self.src_start);
+        let other_then_self = self.contains_point(other.src_start + other.len)
+            && !other.contains_point(other.src_start);
+        self_then_other || other_then_self
+    }
+
+    fn partition(self, pivots: Vec) -> Vec<Self> {
+        let mut ranges = Vec::new();
+
+        let mut src_start = self.src_start;
+        let mut dst_start = self.dst_start;
+        let end = src_start + self.len;
+
+        for pivot in pivots {
+            ranges.push(Self {
+                dst_start,
+                src_start,
+                len: pivot - src_start,
+            });
+            src_start = pivot;
+            dst_start = dst_start + pivot - src_start
+        }
+
+        ranges.push(Self {
+            dst_start,
+            src_start,
+            len: end - src_start,
+        });
+
+        ranges
+    }
+
+    fn get_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, Self> {
+        let line = lines.next().unwrap().unwrap();
+        let (_, seeds) = line.split_once(':').unwrap();
+
+        let seeds: Vec<usize> = seeds
+            .split_whitespace()
+            .map(|s| s.parse().unwrap())
+            .collect();
+
+        let mut map = BTreeMap::new();
+        for seed in seeds {
+            map.insert(seed, Self::new(seed, seed, 1));
+        }
+
+        map
+    }
+
+    fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, Self> {
+        let line = lines.next().unwrap().unwrap();
+        let (_, seeds) = line.split_once(':').unwrap();
+
+        let seeds: Vec<usize> = seeds
+            .split_whitespace()
+            .map(|s| s.parse().unwrap())
+            .collect();
+
+        let seeds: Vec<(usize, usize)> = seeds
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0], chunk[1]))
+            .collect();
+
+        let mut map = BTreeMap::new();
+        for (seed, len) in seeds {
+            map.insert(seed, Self::new(seed, seed, len));
+        }
+
+        map
+    }
+}
+
+#[derive(Debug)]
 struct RangeMap {
-    range_to_dest: BTreeMap<usize, (usize, usize)>,
+    ranges: BTreeMap<usize, SeedRange>,
 }
 
 impl RangeMap {
     fn new() -> Self {
         Self {
-            range_to_dest: BTreeMap::new(),
+            ranges: BTreeMap::new(),
         }
     }
 
-    fn parse_line(&mut self, line: &String) {
+    fn parse_line(&mut self, line: &str) {
         let elements: Vec<usize> = line.splitn(3, ' ').map(|s| s.parse().unwrap()).collect();
-        let dest_start = elements[0];
-        let source_start = elements[1];
-        let length = elements[2];
+        let dst_start = elements[0];
+        let src_start = elements[1];
+        let len = elements[2];
 
-        self.range_to_dest
-            .insert(source_start, (dest_start, length));
+        self.ranges
+            .insert(src_start, SeedRange::new(dst_start, src_start, len));
     }
 
-    fn get(&self, seed: (&usize, &usize)) -> (usize, usize) {
-        println!("{seed:?}");
-        let (seed, seed_len) = seed;
-
-        // TODO: do good candidate search
-        // search for start and end with length 1
-        // then, cause BTreeSet, we take all in between
+    fn get(&self, seed: SeedRange) -> Vec<SeedRange> {
         let candidates = self
-            .range_to_dest
+            .ranges
             .iter()
-            .filter(|(source_start, (_, length))| {
-                let contains_seed =
-                    *source_start < seed && *seed + *seed_len < *source_start + length;
-                let is_contained =
-                    *source_start >= seed && *seed + *seed_len >= *source_start + length;
-                let starts_seed =
-                    *source_start <= seed && *seed + *seed_len >= *source_start + length;
-                let ends_seed = *source_start >= seed && *seed + *seed_len < *source_start + length;
-                contains_seed || is_contained || starts_seed || ends_seed
+            .filter(|(_, range)| {
+                seed.intersects(range) || seed.contains(range) || seed.is_contained_in(range)
             })
             .collect::<Vec<_>>();
 
-        println!("{candidates:?}");
+        println!("{seed:?}: {candidates:?}");
 
-        // match candidates {
-        //     Some((source_start, (dest_start, _))) => (dest_start + seed - source_start, *len),
-        //     None => (*seed, *len),
-        // }
-        (0, 0)
+        let ranges = Vec::new();
+        for (index, range) in candidates {
+            if seed.intersects(range) {
+                if seed.src_start < range.src_start
+                /* end of seed in range */
+                {
+                } else {
+                }
+            } else if seed.contains(range) {
+            } else
+            /* seed is_contained_in range */
+            {
+            }
+        }
+
+        ranges
     }
-}
-
-fn get_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, usize> {
-    let line = lines.next().unwrap().unwrap();
-    let (_, seeds) = line.split_once(':').unwrap();
-
-    seeds
-        .split_whitespace()
-        .map(|s| (s.parse().unwrap(), 1))
-        .collect()
-}
-
-fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> BTreeMap<usize, usize> {
-    let line = lines.next().unwrap().unwrap();
-    let (_, seeds) = line.split_once(':').unwrap();
-
-    let seeds: Vec<usize> = seeds
-        .split_whitespace()
-        .map(|s| s.parse().unwrap())
-        .collect();
-
-    seeds
-        .chunks_exact(2)
-        .map(|chunk| (chunk[0], chunk[1]))
-        .collect()
 }
 
 fn iterate_seed_list(
     lines: &mut Lines<BufReader<File>>,
-    seed_list: BTreeMap<usize, usize>,
-) -> BTreeMap<usize, usize> {
+    seed_list: BTreeMap<usize, SeedRange>,
+) -> BTreeMap<usize, SeedRange> {
     let mut seed_list = seed_list;
 
     while let Some(Ok(mut line)) = lines.next() {
@@ -128,8 +208,16 @@ fn iterate_seed_list(
         }
 
         // use map to process seeds stuff
-        println!("{map:?}");
-        seed_list = seed_list.iter().map(|e| map.get(e)).collect();
+        println!("{line}");
+        let mut list = BTreeMap::new();
+        for (_, seed) in seed_list {
+            let seeds = map.get(seed);
+
+            for s in seeds {
+                list.insert(s.src_start, s);
+            }
+        }
+        seed_list = list;
     }
 
     seed_list
@@ -142,13 +230,15 @@ fn part1(filename: &str) -> u32 {
     let mut lines = file.lines();
 
     // extract seeds and consume that line
-    let seed_list = get_seeds(&mut lines);
+    let seed_list = SeedRange::get_seeds(&mut lines);
+    println!("SeedList {seed_list:?}");
 
     // get final seed list
     let final_seeds = iterate_seed_list(&mut lines, seed_list);
 
     // find smallest value
-    *final_seeds.keys().nth(0).unwrap() as u32
+    // *final_seeds.keys().next().unwrap() as u32
+    0
 }
 
 fn part2(filename: &str) -> u32 {
@@ -158,13 +248,13 @@ fn part2(filename: &str) -> u32 {
     let mut lines = file.lines();
 
     // extract seeds and consume that line
-    let seed_list = get_range_seeds(&mut lines);
+    let seed_list = SeedRange::get_range_seeds(&mut lines);
 
     // get final seed list
     let final_seeds = iterate_seed_list(&mut lines, seed_list);
 
     // find smallest value
-    *final_seeds.keys().nth(0).unwrap() as u32
+    *final_seeds.keys().next().unwrap() as u32
 }
 
 #[test]
