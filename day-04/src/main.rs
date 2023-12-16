@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -28,16 +29,22 @@ fn part1(filename: &str) -> u32 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    // Card  n: xx xx xx  | xx xx xx xx xx
-    // game  n: winning # | our numbers
-    // TODO: build a hash set and then use .intersection().len()
-    // use .collect::<HashSet<>>() ...
-    // string parse everything just by whitespace
-    // score = 1 << (intersect_len - 1)
+    file.lines().fold(0, |sum, line| {
+        let line = line.unwrap();
+        let (_, numbers) = line.split_once(':').unwrap();
+        let (winning_nums, our_nums) = numbers.split_once('|').unwrap();
 
-    let mut sum = 0;
+        let winning_set = winning_nums.split_whitespace().collect::<HashSet<&str>>();
+        let our_set = our_nums.split_whitespace().collect::<HashSet<&str>>();
 
-    sum
+        let common_num_count = winning_set.intersection(&our_set).count();
+
+        if common_num_count == 0 {
+            sum
+        } else {
+            sum + (1 << (common_num_count - 1))
+        }
+    })
 }
 
 fn part2(filename: &str) -> u32 {
@@ -54,7 +61,7 @@ fn part1_example() {
 
 #[test]
 fn part1_puzzle() {
-    assert_eq!(105, part1(PART1_FILE));
+    assert_eq!(25174, part1(PART1_FILE));
 }
 
 // #[test]
