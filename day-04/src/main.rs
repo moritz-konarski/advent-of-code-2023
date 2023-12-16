@@ -25,7 +25,7 @@ fn main() {
     }
 }
 
-fn get_common_nums(line: &String) -> usize {
+fn get_common_nums(line: &str) -> usize {
     let (_, numbers) = line.split_once(':').unwrap();
     let (winning_nums, our_nums) = numbers.split_once('|').unwrap();
 
@@ -35,7 +35,7 @@ fn get_common_nums(line: &String) -> usize {
     winning_set.intersection(&our_set).count()
 }
 
-fn get_score(line: &String) -> u32 {
+fn get_score(line: &str) -> u32 {
     let common_num_count = get_common_nums(line) as u32;
     if common_num_count == 0 {
         0

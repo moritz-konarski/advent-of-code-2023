@@ -36,14 +36,14 @@ fn main() {
     }
 }
 
-fn get_legal_game_id(line: &String) -> Option<u32> {
+fn get_legal_game_id(line: &str) -> Option<u32> {
     let (game, draws) = line.split_once(GAME_DELIM).unwrap();
 
     for draw in draws.split(DRAW_DELIM) {
         for color_draw in draw.splitn(3, COLOR_DELIM) {
             let (count, color) = color_draw.split_once(COUNT_DELIM).unwrap();
 
-            let count = u32::from_str_radix(count, 10).expect("should work");
+            let count: u32 = count.parse().expect("should work");
             let limit = match color {
                 RED => COUNTS.red,
                 BLUE => COUNTS.blue,
@@ -58,7 +58,7 @@ fn get_legal_game_id(line: &String) -> Option<u32> {
     }
 
     let (_, id) = game.split_once(COUNT_DELIM).unwrap();
-    Some(u32::from_str_radix(id, 10).expect("should work"))
+    Some(id.parse().expect("should work"))
 }
 
 fn part1(filename: &str) -> u32 {
@@ -76,7 +76,7 @@ fn part1(filename: &str) -> u32 {
     })
 }
 
-fn get_required_powers(line: &String) -> u32 {
+fn get_required_powers(line: &str) -> u32 {
     let (_, draws) = line.split_once(GAME_DELIM).unwrap();
     let mut counter = Counts::new();
 
@@ -140,7 +140,7 @@ impl Counts {
         for color_draw in draw.splitn(3, COLOR_DELIM) {
             let (count, color) = color_draw.split_once(COUNT_DELIM).unwrap();
 
-            let count = u32::from_str_radix(count, 10).expect("should work");
+            let count: u32 = count.parse().expect("should work");
             match color {
                 RED => self.red = self.red.max(count),
                 BLUE => self.blue = self.blue.max(count),

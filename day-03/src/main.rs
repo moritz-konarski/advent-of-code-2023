@@ -32,18 +32,18 @@ struct Number {
 }
 
 impl Number {
-    fn parse(line: &String) -> Vec<Self> {
+    fn parse(line: &str) -> Vec<Self> {
         let mut nums = vec![];
         let mut iter = line.chars().enumerate();
 
         while let Some((mut index, mut letter)) = iter.next() {
-            if !letter.is_digit(10) {
+            if !letter.is_ascii_digit() {
                 continue;
             }
 
             let start = index;
             let mut digits = vec![];
-            while letter.is_digit(10) {
+            while letter.is_ascii_digit() {
                 digits.push(letter);
 
                 match iter.next() {
@@ -62,7 +62,7 @@ impl Number {
             });
         }
 
-        return nums;
+        nums
     }
 }
 
@@ -74,7 +74,7 @@ struct Symbol {
 }
 
 impl Symbol {
-    fn parse(line: &String) -> Vec<Self> {
+    fn parse(line: &str) -> Vec<Self> {
         let mut syms = vec![];
 
         for (index, sym) in line.chars().enumerate() {
@@ -88,7 +88,7 @@ impl Symbol {
             }
         }
 
-        return syms;
+        syms
     }
 
     fn sum(&self) -> u32 {
@@ -108,7 +108,7 @@ impl Symbol {
             return true;
         }
 
-        return false;
+        false
     }
 
     fn add_num(&mut self, num: &Number) {
@@ -140,7 +140,7 @@ impl SymbolData {
         // add current nums to previous symbols
         for sym in self.prev_sym.iter_mut() {
             for num in &self.curr_num {
-                if sym.is_adjacent_to(&num) {
+                if sym.is_adjacent_to(num) {
                     sym.add_num(num);
                 } else if num.start > sym.index {
                     break;
@@ -154,16 +154,16 @@ impl SymbolData {
         // add previous and current nums to current symbols
         for sym in self.curr_sym.iter_mut() {
             for num in &self.prev_num {
-                if sym.is_adjacent_to(&num) {
-                    sym.add_num(&num);
+                if sym.is_adjacent_to(num) {
+                    sym.add_num(num);
                 } else if num.start > sym.index {
                     break;
                 }
             }
 
             for num in &self.curr_num {
-                if sym.is_adjacent_to(&num) {
-                    sym.add_num(&num);
+                if sym.is_adjacent_to(num) {
+                    sym.add_num(num);
                 } else if num.start > sym.index {
                     break;
                 }

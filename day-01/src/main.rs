@@ -3,8 +3,6 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 const RADIX: u32 = 10;
-const TEST1_FILE: &str = "test1.txt";
-const TEST2_FILE: &str = "test2.txt";
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
 
@@ -28,9 +26,9 @@ fn main() {
 }
 
 #[inline]
-fn process_left(line: &String) -> u32 {
+fn process_left(line: &str) -> u32 {
     for c in line.chars() {
-        if c.is_digit(10) {
+        if c.is_ascii_digit() {
             return c.to_digit(10).unwrap();
         }
     }
@@ -38,9 +36,9 @@ fn process_left(line: &String) -> u32 {
 }
 
 #[inline]
-fn process_right(line: &String) -> u32 {
+fn process_right(line: &str) -> u32 {
     for c in line.chars().rev() {
-        if c.is_digit(10) {
+        if c.is_ascii_digit() {
             return c.to_digit(10).unwrap();
         }
     }
@@ -71,7 +69,7 @@ fn part2(filename: &str) -> u32 {
 
 #[test]
 fn part1_example() {
-    assert_eq!(142, part1(TEST1_FILE));
+    assert_eq!(142, part1("test1.txt"));
 }
 
 #[test]
@@ -81,7 +79,7 @@ fn part1_puzzle() {
 
 #[test]
 fn part2_example() {
-    assert_eq!(281, part2(TEST2_FILE));
+    assert_eq!(281, part2("test2.txt"));
 }
 
 #[test]
@@ -105,7 +103,7 @@ impl NumberParser {
         false
     }
 
-    fn parse(&self, line: &String, start: usize) -> Option<u32> {
+    fn parse(&self, line: &str, start: usize) -> Option<u32> {
         let mut chars = line.chars();
         let index = self.find_child(chars.nth(start).unwrap()).unwrap();
         let mut node = self.children.get(index).unwrap();
@@ -123,7 +121,7 @@ impl NumberParser {
         None
     }
 
-    fn get_left(&self, line: &String) -> u32 {
+    fn get_left(&self, line: &str) -> u32 {
         for (index, letter) in line.chars().enumerate() {
             if letter.is_digit(RADIX) {
                 return letter.to_digit(RADIX).unwrap();
@@ -136,11 +134,11 @@ impl NumberParser {
         unreachable!("there must be a digit")
     }
 
-    fn get_right(&self, line: &String) -> u32 {
+    fn get_right(&self, line: &str) -> u32 {
         let line_len = line.len() - 1;
 
         for (index, letter) in line.chars().rev().enumerate() {
-            if letter.is_digit(RADIX) {
+            if letter.is_ascii_digit() {
                 return letter.to_digit(RADIX).unwrap();
             } else if index >= 2 && self.can_start_digit(letter) {
                 if let Some(digit) = self.parse(line, line_len - index) {
@@ -165,7 +163,7 @@ impl NumberParser {
         root.add_word("eight", 8);
         root.add_word("nine", 9);
 
-        return root;
+        root
     }
 
     fn get_new_node(letter: char) -> Self {
@@ -194,13 +192,11 @@ impl NumberParser {
             let index = if node.children.is_empty() {
                 node.children.push(new_child);
                 0
+            } else if let Some(found_index) = node.find_child(letter) {
+                found_index
             } else {
-                if let Some(found_index) = node.find_child(letter) {
-                    found_index
-                } else {
-                    node.children.push(new_child);
-                    node.children.len() - 1
-                }
+                node.children.push(new_child);
+                node.children.len() - 1
             };
             node = node.children.get_mut(index).unwrap();
         }
