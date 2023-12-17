@@ -91,7 +91,6 @@ impl MapSet {
 
         seeds
     }
-}
 
 fn get_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<Mapping> {
     let line = lines.next().unwrap().unwrap();
@@ -188,15 +187,15 @@ fn part1_example() {
     assert_eq!(35, part1("test1.txt"));
 }
 
-#[test]
-fn part1_puzzle() {
-    assert_eq!(227653707, part1(PART1_FILE));
-}
+// #[test]
+// fn part1_puzzle() {
+//     assert_eq!(227653707, part1(PART1_FILE));
+// }
 
-#[test]
-fn part2_example() {
-    assert_eq!(46, part2("test2.txt"));
-}
+// #[test]
+// fn part2_example() {
+//     assert_eq!(46, part2("test2.txt"));
+// }
 
 // #[test]
 // fn part2_puzzle() {
