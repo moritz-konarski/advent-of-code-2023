@@ -43,6 +43,23 @@ enum Card {
     _2 = 0,
 }
 
+#[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Hash)]
+enum Card2 {
+    _A = 12,
+    _K = 11,
+    _Q = 10,
+    _T = 9,
+    _9 = 8,
+    _8 = 7,
+    _7 = 6,
+    _6 = 5,
+    _5 = 4,
+    _4 = 3,
+    _3 = 2,
+    _2 = 1,
+    _J = 0,
+}
+
 const CHAR_TO_CARD_LIST: [(char, Card); 13] = [
     ('A', Card::_A),
     ('K', Card::_K),
@@ -81,13 +98,22 @@ impl Hand {
         let (cards, bid) = line.split_once(' ').unwrap();
 
         let cards: Vec<Card> = cards.chars().map(|c| *map.get(&c).unwrap()).collect();
+        let bid = bid.parse().unwrap();
 
-        let mut card_to_count = HashMap::with_capacity(cards.len());
-        cards
+        Self {
+            cards,
+            poker_type: HandType::HighCard,
+            bid,
+        }
+    }
+
+    fn parse_hand_type(&mut self) {
+        let mut card_to_count = HashMap::with_capacity(self.cards.len());
+        self.cards
             .iter()
             .for_each(|card| *card_to_count.entry(card).or_insert(0) += 1);
 
-        let poker_type = match card_to_count.len() {
+        self.poker_type = match card_to_count.len() {
             1 => HandType::Quintuplet,
             2 => {
                 if *card_to_count.values().max().unwrap() == 4 {
@@ -107,14 +133,6 @@ impl Hand {
             5 => HandType::HighCard,
             _ => unreachable!("there are no other options"),
         };
-
-        let bid = bid.parse().unwrap();
-
-        Self {
-            cards,
-            poker_type,
-            bid,
-        }
     }
 }
 
@@ -161,7 +179,9 @@ fn part1(filename: &str) -> usize {
 
     for line in file.lines() {
         let line = line.unwrap();
-        hands.push(Hand::new(&line, &char_to_card));
+        let mut hand = Hand::new(&line, &char_to_card);
+        hand.parse_hand_type();
+        hands.push(hand);
     }
 
     hands.sort_unstable();
@@ -175,7 +195,19 @@ fn part2(filename: &str) -> usize {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    0
+    let char_to_card = HashMap::from(CHAR_TO_CARD_LIST);
+    let mut hands = Vec::new();
+
+    for line in file.lines() {
+        let line = line.unwrap();
+        hands.push(Hand::new(&line, &char_to_card));
+    }
+
+    hands.sort_unstable();
+    hands
+        .iter()
+        .enumerate()
+        .fold(0, |sum, (i, hand)| sum + (i + 1) * hand.bid)
 }
 
 #[test]
@@ -188,10 +220,10 @@ fn part1_puzzle() {
     assert_eq!(250058342, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(71503, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(5905, part2("test2.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
