@@ -26,28 +26,12 @@ fn main() {
     }
 }
 
-#[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Hash)]
 enum Card {
-    _A = 12,
-    _K = 11,
-    _Q = 10,
-    _J = 9,
-    _T = 8,
-    _9 = 7,
-    _8 = 6,
-    _7 = 5,
-    _6 = 4,
-    _5 = 3,
-    _4 = 2,
-    _3 = 1,
-    _2 = 0,
-}
-
-#[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Hash)]
-enum Card2 {
-    _A = 12,
-    _K = 11,
-    _Q = 10,
+    _A = 13,
+    _K = 12,
+    _Q = 11,
+    _J = 10,
     _T = 9,
     _9 = 8,
     _8 = 7,
@@ -57,7 +41,7 @@ enum Card2 {
     _4 = 3,
     _3 = 2,
     _2 = 1,
-    _J = 0,
+    _J2 = 0,
 }
 
 const CHAR_TO_CARD_LIST: [(char, Card); 13] = [
@@ -76,8 +60,8 @@ const CHAR_TO_CARD_LIST: [(char, Card); 13] = [
     ('2', Card::_2),
 ];
 
-#[derive(PartialEq, PartialOrd, Eq, Ord)]
-enum HandType {
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
+enum PokerType {
     Quintuplet = 6,
     Quadruplet = 5,
     FullHouse = 4,
@@ -87,9 +71,10 @@ enum HandType {
     HighCard = 0,
 }
 
+#[derive(Debug)]
 struct Hand {
     cards: Vec<Card>,
-    poker_type: HandType,
+    poker_type: PokerType,
     bid: usize,
 }
 
@@ -102,7 +87,7 @@ impl Hand {
 
         Self {
             cards,
-            poker_type: HandType::HighCard,
+            poker_type: PokerType::HighCard,
             bid,
         }
     }
@@ -114,25 +99,68 @@ impl Hand {
             .for_each(|card| *card_to_count.entry(card).or_insert(0) += 1);
 
         self.poker_type = match card_to_count.len() {
-            1 => HandType::Quintuplet,
+            1 => PokerType::Quintuplet,
             2 => {
                 if *card_to_count.values().max().unwrap() == 4 {
-                    HandType::Quadruplet
+                    PokerType::Quadruplet
                 } else {
-                    HandType::FullHouse
+                    PokerType::FullHouse
                 }
             }
             3 => {
                 if *card_to_count.values().max().unwrap() == 3 {
-                    HandType::Triplet
+                    PokerType::Triplet
                 } else {
-                    HandType::TwoPair
+                    PokerType::TwoPair
                 }
             }
-            4 => HandType::Pair,
-            5 => HandType::HighCard,
+            4 => PokerType::Pair,
+            5 => PokerType::HighCard,
             _ => unreachable!("there are no other options"),
         };
+    }
+
+    fn optimize_hand_type(&mut self) {
+        self.parse_hand_type();
+
+        let joker_count = self.cards.iter().filter(|c| **c == Card::_J).count();
+        if joker_count == 0 {
+            return;
+        }
+        self.cards.iter_mut().for_each(|c| {
+            if *c == Card::_J {
+                *c = Card::_J2;
+            }
+        });
+
+        match self.poker_type {
+            PokerType::Quintuplet => { /* already the best */ }
+            PokerType::Quadruplet | PokerType::FullHouse => {
+                // make a quintuplet from quadruplet or full house
+                self.poker_type = PokerType::Quintuplet;
+            }
+            PokerType::Triplet => {
+                // make a quadruplet
+                self.poker_type = PokerType::Quadruplet;
+            }
+            PokerType::TwoPair => {
+                if joker_count == 2 {
+                    // join the other pair
+                    self.poker_type = PokerType::Quadruplet;
+                } else {
+                    // join one of the pairs
+                    self.poker_type = PokerType::FullHouse;
+                }
+            }
+            PokerType::Pair => {
+                // make a triplet by joining the best other card
+                self.poker_type = PokerType::Triplet;
+            }
+            PokerType::HighCard => {
+                // either make a pair with the highest other card
+                self.poker_type = PokerType::Pair;
+            }
+        }
     }
 }
 
@@ -200,7 +228,9 @@ fn part2(filename: &str) -> usize {
 
     for line in file.lines() {
         let line = line.unwrap();
-        hands.push(Hand::new(&line, &char_to_card));
+        let mut hand = Hand::new(&line, &char_to_card);
+        hand.optimize_hand_type();
+        hands.push(hand);
     }
 
     hands.sort_unstable();
@@ -225,7 +255,7 @@ fn part2_example() {
     assert_eq!(5905, part2("test2.txt"));
 }
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(35150181, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(250506580, part2(PART2_FILE));
+}
