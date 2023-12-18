@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -25,63 +26,149 @@ fn main() {
     }
 }
 
-const CARDS: [(char, usize); 13] = [
-    ('A', 12),
-    ('K', 11),
-    ('Q', 10),
-    ('J', 9),
-    ('T', 8),
-    ('9', 7),
-    ('8', 6),
-    ('7', 5),
-    ('6', 4),
-    ('5', 3),
-    ('4', 2),
-    ('3', 1),
-    ('2', 0),
+#[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Hash)]
+enum Card {
+    _A = 12,
+    _K = 11,
+    _Q = 10,
+    _J = 9,
+    _T = 8,
+    _9 = 7,
+    _8 = 6,
+    _7 = 5,
+    _6 = 4,
+    _5 = 3,
+    _4 = 2,
+    _3 = 1,
+    _2 = 0,
+}
+
+const CHAR_TO_CARD_LIST: [(char, Card); 13] = [
+    ('A', Card::_A),
+    ('K', Card::_K),
+    ('Q', Card::_Q),
+    ('J', Card::_J),
+    ('T', Card::_T),
+    ('9', Card::_9),
+    ('8', Card::_8),
+    ('7', Card::_7),
+    ('6', Card::_6),
+    ('5', Card::_5),
+    ('4', Card::_4),
+    ('3', Card::_3),
+    ('2', Card::_2),
 ];
 
+#[derive(PartialEq, PartialOrd, Eq, Ord)]
+enum HandType {
+    Quintuplet = 6,
+    Quadruplet = 5,
+    FullHouse = 4,
+    Triplet = 3,
+    TwoPair = 2,
+    Pair = 1,
+    HighCard = 0,
+}
+
 struct Hand {
-    cards: [usize; 5],
+    cards: Vec<Card>,
+    poker_type: HandType,
     bid: usize,
 }
 
 impl Hand {
-    fn new(line: &str, map: &HashMap<char, usize>) -> Self {
-        let (hand, bid) = line.split_once(' ').unwrap();
-        let bid = bid;
+    fn new(line: &str, map: &HashMap<char, Card>) -> Self {
+        let (cards, bid) = line.split_once(' ').unwrap();
+
+        let cards: Vec<Card> = cards.chars().map(|c| *map.get(&c).unwrap()).collect();
+
+        let mut card_to_count = HashMap::with_capacity(cards.len());
+        cards
+            .iter()
+            .for_each(|card| *card_to_count.entry(card).or_insert(0) += 1);
+
+        let poker_type = match card_to_count.len() {
+            1 => HandType::Quintuplet,
+            2 => {
+                if *card_to_count.values().max().unwrap() == 4 {
+                    HandType::Quadruplet
+                } else {
+                    HandType::FullHouse
+                }
+            }
+            3 => {
+                if *card_to_count.values().max().unwrap() == 3 {
+                    HandType::Triplet
+                } else {
+                    HandType::TwoPair
+                }
+            }
+            4 => HandType::Pair,
+            5 => HandType::HighCard,
+            _ => unreachable!("there are no other options"),
+        };
+
+        let bid = bid.parse().unwrap();
 
         Self {
-            cards: [0; 5],
-            bid: 0,
+            cards,
+            poker_type,
+            bid,
         }
     }
 }
+
+impl Ord for Hand {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let rank_ord = self.poker_type.cmp(&other.poker_type);
+        if rank_ord != Ordering::Equal {
+            return rank_ord;
+        }
+
+        if let Some((card, other_card)) = self
+            .cards
+            .iter()
+            .zip(&other.cards)
+            .find(|(card, other_card)| card != other_card)
+        {
+            card.cmp(other_card)
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl PartialOrd for Hand {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Hand {
+    fn eq(&self, other: &Self) -> bool {
+        self.poker_type == other.poker_type
+    }
+}
+
+impl Eq for Hand {}
 
 fn part1(filename: &str) -> usize {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    let map = HashMap::from(CARDS);
+    let char_to_card = HashMap::from(CHAR_TO_CARD_LIST);
     let mut hands = Vec::new();
 
     for line in file.lines() {
         let line = line.unwrap();
-        hands.push(Hand::new(&line, &map));
+        hands.push(Hand::new(&line, &char_to_card));
     }
 
-    // poker hands
-    // high card: 5 unique cards
-    // pair: 4 unique cards
-    // two pair: 3 unique cards
-    // triplet: 3 unique cards
-    // full house: 2 unique cards
-    // quadruplet: 2 unique cards
-    // quintuples: 1 unique cards
-
-    // then order then by relative card strength
-
-    0
+    hands.sort_unstable();
+    hands
+        .iter()
+        .enumerate()
+        .fold(0, |sum, (i, hand)| sum + (i + 1) * hand.bid)
 }
 
 fn part2(filename: &str) -> usize {
@@ -96,10 +183,10 @@ fn part1_example() {
     assert_eq!(6440, part1("test1.txt"));
 }
 
-// #[test]
-// fn part1_puzzle() {
-//     assert_eq!(293046, part1(PART1_FILE));
-// }
+#[test]
+fn part1_puzzle() {
+    assert_eq!(250058342, part1(PART1_FILE));
+}
 
 // #[test]
 // fn part2_example() {
