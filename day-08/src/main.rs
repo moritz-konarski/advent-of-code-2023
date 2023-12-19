@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -7,6 +6,8 @@ const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
 const START_LABEL: &str = "AAA";
 const END_LABEL: &str = "ZZZ";
+const START_LABEL2: &str = "A";
+const END_LABEL2: &str = "Z";
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-08 p<n>";
@@ -27,26 +28,33 @@ fn main() {
     }
 }
 
+#[derive(Debug)]
 struct Node {
     label: String,
-    left: String,
-    right: String,
+    left: Option<usize>,
+    right: Option<usize>,
+    is_end: bool,
 }
 
 impl Node {
-    fn new(line: &str) -> Self {
-        let (label, connections) = line.split_once(" = ").unwrap();
+    fn new(label: &str, end_str: &str) -> Self {
         let label = label.to_string();
+        let is_end = label.ends_with(end_str);
 
-        let (left, right) = connections.split_once(", ").unwrap();
-        let left = left.get(1..).unwrap().to_string();
-        let right = right.get(..right.len() - 1).unwrap().to_string();
-
-        Self { label, left, right }
+        Self {
+            label,
+            left: None,
+            right: None,
+            is_end,
+        }
     }
 
-    fn is_end(&self) -> bool {
-        self.label == END_LABEL
+    fn add_left(&mut self, other: usize) {
+        self.left = Some(other);
+    }
+
+    fn add_right(&mut self, other: usize) {
+        self.right = Some(other);
     }
 }
 
@@ -55,29 +63,62 @@ fn part1(filename: &str) -> usize {
     let file = BufReader::new(file);
 
     let mut lines = file.lines();
-
     let command_line = lines.next().unwrap().unwrap();
 
-    let mut nodes = HashMap::new();
+    let mut node_list = Vec::new();
+    let mut conn_list = Vec::new();
+
     for line in lines {
         let line = line.unwrap();
         if line.is_empty() {
             continue;
         }
 
-        let node = Node::new(&line);
-        nodes.insert(node.label.clone(), node);
+        let (label, connections) = line.split_once(" = ").unwrap();
+        let node = Node::new(&label, END_LABEL);
+
+        node_list.push(node);
+        conn_list.push(connections.to_owned());
     }
 
-    let mut node = nodes.get(START_LABEL).unwrap();
+    println!("{node_list:?}");
+
+    for (i, conn) in conn_list.iter().enumerate() {
+        let (left, right) = conn.split_once(", ").unwrap();
+
+        let left = left.get(1..).unwrap();
+        let left = node_list
+            .iter()
+            .position(|node| node.label == left)
+            .unwrap();
+
+        let right = right.get(..right.len() - 1).unwrap();
+        println!("{right:?}");
+        let right = node_list
+            .iter()
+            .position(|node| node.label == right)
+            .unwrap();
+        println!("{right:?}");
+
+        node_list[i].add_left(left);
+        node_list[i].add_right(right);
+    }
+
+    println!("{node_list:?}");
+
+    let mut current_node = node_list
+        .iter()
+        .position(|node| node.label.ends_with(START_LABEL))
+        .unwrap();
+
     for (index, command) in command_line.chars().cycle().enumerate() {
         match command {
-            'R' => node = nodes.get(&node.right).unwrap(),
-            'L' => node = nodes.get(&node.left).unwrap(),
+            'R' => current_node = node_list[current_node].right.unwrap(),
+            'L' => current_node = node_list[current_node].left.unwrap(),
             _ => unreachable!("there are no other commands"),
         }
 
-        if node.is_end() {
+        if node_list[current_node].is_end {
             return index + 1;
         }
     }
@@ -85,9 +126,6 @@ fn part1(filename: &str) -> usize {
 }
 
 fn part2(filename: &str) -> usize {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
-
     0
 }
 
@@ -108,7 +146,7 @@ fn part1_puzzle() {
 
 // #[test]
 // fn part2_example() {
-//     assert_eq!(5905, part2("test2.txt"));
+//     assert_eq!(6, part2("test2.txt"));
 // }
 
 // #[test]
