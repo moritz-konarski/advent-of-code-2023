@@ -6,7 +6,7 @@ const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
 
 fn main() {
-    let usage = "Incorrect arguements!\nUsage: day-07 p<n>";
+    let usage = "Incorrect arguements!\nUsage: day-09 p<n>";
     if let Some(part) = env::args().nth(1) {
         match part.as_str() {
             "p1" => {
