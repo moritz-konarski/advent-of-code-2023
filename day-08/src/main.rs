@@ -191,12 +191,10 @@ fn part2(filename: &str) -> usize {
         })
         .collect();
 
-    let solutions: Vec<_> = current_nodes
+    current_nodes
         .iter()
         .map(|n| get_steps_to_end(&node_list, &command_line, *n))
-        .collect();
-
-    solutions.iter().fold(1, |lcm, s| integer::lcm(lcm, *s))
+        .fold(1, |lcm, s| integer::lcm(lcm, s))
 }
 
 #[test]
@@ -219,7 +217,7 @@ fn part2_example() {
     assert_eq!(6, part2("test2.txt"));
 }
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(250506580, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(10371555451871, part2(PART2_FILE));
+}
