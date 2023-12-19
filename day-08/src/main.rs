@@ -1,13 +1,19 @@
+use num::integer;
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Lines};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
+
 const START_LABEL: &str = "AAA";
 const END_LABEL: &str = "ZZZ";
+
 const START_LABEL2: &str = "A";
 const END_LABEL2: &str = "Z";
+
+const RIGHT: u32 = 0;
+const LEFT: u32 = 1;
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-08 p<n>";
@@ -28,7 +34,6 @@ fn main() {
     }
 }
 
-#[derive(Debug)]
 struct Node {
     label: String,
     left: Option<usize>,
@@ -49,22 +54,37 @@ impl Node {
         }
     }
 
-    fn add_left(&mut self, other: usize) {
-        self.left = Some(other);
-    }
-
-    fn add_right(&mut self, other: usize) {
-        self.right = Some(other);
+    fn with_left_right(
+        label: String,
+        left: Option<usize>,
+        right: Option<usize>,
+        is_end: bool,
+    ) -> Self {
+        Self {
+            label,
+            left,
+            right,
+            is_end,
+        }
     }
 }
 
-fn part1(filename: &str) -> usize {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
-
-    let mut lines = file.lines();
+fn get_commands(lines: &mut Lines<BufReader<File>>) -> Vec<u32> {
     let command_line = lines.next().unwrap().unwrap();
+    command_line
+        .chars()
+        .map(|c| match c {
+            'R' => RIGHT,
+            'L' => LEFT,
+            _ => unreachable!("no other commands"),
+        })
+        .collect()
+}
 
+fn get_nodes_conns(
+    lines: &mut Lines<BufReader<File>>,
+    end_label: &str,
+) -> (Vec<Node>, Vec<String>) {
     let mut node_list = Vec::new();
     let mut conn_list = Vec::new();
 
@@ -75,46 +95,50 @@ fn part1(filename: &str) -> usize {
         }
 
         let (label, connections) = line.split_once(" = ").unwrap();
-        let node = Node::new(&label, END_LABEL);
+        let node = Node::new(label, end_label);
 
         node_list.push(node);
-        conn_list.push(connections.to_owned());
+        conn_list.push(connections.to_string());
     }
 
-    println!("{node_list:?}");
+    (node_list, conn_list)
+}
 
-    for (i, conn) in conn_list.iter().enumerate() {
-        let (left, right) = conn.split_once(", ").unwrap();
-
-        let left = left.get(1..).unwrap();
-        let left = node_list
-            .iter()
-            .position(|node| node.label == left)
-            .unwrap();
-
-        let right = right.get(..right.len() - 1).unwrap();
-        println!("{right:?}");
-        let right = node_list
-            .iter()
-            .position(|node| node.label == right)
-            .unwrap();
-        println!("{right:?}");
-
-        node_list[i].add_left(left);
-        node_list[i].add_right(right);
-    }
-
-    println!("{node_list:?}");
-
-    let mut current_node = node_list
+fn update_nodes(node_list: Vec<Node>, conn_list: Vec<String>) -> Vec<Node> {
+    conn_list
         .iter()
-        .position(|node| node.label.ends_with(START_LABEL))
-        .unwrap();
+        .enumerate()
+        .map(|(i, conn)| {
+            let (left, right) = conn.split_once(", ").unwrap();
 
-    for (index, command) in command_line.chars().cycle().enumerate() {
-        match command {
-            'R' => current_node = node_list[current_node].right.unwrap(),
-            'L' => current_node = node_list[current_node].left.unwrap(),
+            let left = left.get(1..).unwrap();
+            let left = node_list
+                .iter()
+                .position(|node| node.label == left)
+                .unwrap();
+
+            let right = right.get(..right.len() - 1).unwrap();
+            let right = node_list
+                .iter()
+                .position(|node| node.label == right)
+                .unwrap();
+
+            Node::with_left_right(
+                node_list[i].label.clone(),
+                Some(left),
+                Some(right),
+                node_list[i].is_end,
+            )
+        })
+        .collect()
+}
+
+fn get_steps_to_end(node_list: &[Node], command_line: &[u32], current_node: usize) -> usize {
+    let mut current_node = current_node;
+    for (index, command) in command_line.iter().cycle().enumerate() {
+        match *command {
+            RIGHT => current_node = node_list[current_node].right.unwrap(),
+            LEFT => current_node = node_list[current_node].left.unwrap(),
             _ => unreachable!("there are no other commands"),
         }
 
@@ -122,11 +146,57 @@ fn part1(filename: &str) -> usize {
             return index + 1;
         }
     }
-    unreachable!("there must be an end");
+    unreachable!("there is always an end");
+}
+
+fn part1(filename: &str) -> usize {
+    let file = File::open(filename).expect("Should be able to read the file");
+    let file = BufReader::new(file);
+
+    let mut lines = file.lines();
+    let command_line = get_commands(&mut lines);
+
+    let (node_list, conn_list) = get_nodes_conns(&mut lines, END_LABEL);
+
+    let node_list = update_nodes(node_list, conn_list);
+
+    let current_node = node_list
+        .iter()
+        .position(|node| node.label.ends_with(START_LABEL))
+        .unwrap();
+
+    get_steps_to_end(&node_list, &command_line, current_node)
 }
 
 fn part2(filename: &str) -> usize {
-    0
+    let file = File::open(filename).expect("Should be able to read the file");
+    let file = BufReader::new(file);
+
+    let mut lines = file.lines();
+    let command_line = get_commands(&mut lines);
+
+    let (node_list, conn_list) = get_nodes_conns(&mut lines, END_LABEL2);
+
+    let node_list = update_nodes(node_list, conn_list);
+
+    let current_nodes: Vec<_> = node_list
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| {
+            if node.label.ends_with(START_LABEL2) {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let solutions: Vec<_> = current_nodes
+        .iter()
+        .map(|n| get_steps_to_end(&node_list, &command_line, *n))
+        .collect();
+
+    solutions.iter().fold(1, |lcm, s| integer::lcm(lcm, *s))
 }
 
 #[test]
@@ -144,10 +214,10 @@ fn part1_puzzle() {
     assert_eq!(22357, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(6, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(6, part2("test2.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
