@@ -1,11 +1,11 @@
-use std::env;
+use std::{collections::HashSet, env};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
-const WEST: Point = Point { row: 0, col: -1 };
-const EAST: Point = Point { row: 0, col: 1 };
-const NORTH: Point = Point { row: -1, col: 0 };
-const SOUTH: Point = Point { row: 1, col: 0 };
+const WEST: (isize, isize) = (0, -1);
+const EAST: (isize, isize) = (0, 1);
+const NORTH: (isize, isize) = (-1, 0);
+const SOUTH: (isize, isize) = (1, 0);
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-10 p<n>";
@@ -26,70 +26,76 @@ fn main() {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-struct Point {
-    row: isize,
-    col: isize,
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+struct CharPoint {
+    sym: char,
+    row: usize,
+    col: usize,
+    dirs: Vec<(isize, isize)>,
 }
 
-impl Point {
-    fn new(row: usize, col: usize) -> Self {
-        Self {
-            row: row as isize,
-            col: col as isize,
-        }
-    }
-
-    fn move_by(&self, other: &Self) -> Self {
-        Self {
-            row: self.row + other.row,
-            col: self.col + other.col,
-        }
+impl CharPoint {
+    fn get_adj(&self, dir: (isize, isize)) -> (usize, usize) {
+        let r = (self.row as isize + dir.0) as usize;
+        let c = (self.col as isize + dir.1) as usize;
+        (r, c)
     }
 }
 
-struct PipeMap {
-    chars: Vec<Vec<char>>,
-    left_hist: (Option<Point>, Point),
-    right_hist: (Option<Point>, Point),
-    steps: usize,
+#[derive(Clone)]
+struct Trace<'a> {
+    curr: &'a CharPoint,
+    prev: Option<&'a CharPoint>,
 }
 
-impl PipeMap {
+struct PipeMap<'a> {
+    points: Vec<Vec<CharPoint>>,
+    trace_a: Trace<'a>,
+    trace_b: Trace<'a>,
+    point_set: HashSet<&'a CharPoint>,
+    step_count: usize,
+}
+
+impl PipeMap<'_> {
     fn new(file: &str) -> Self {
-        let chars: Vec<Vec<char>> = file
+        let points: Vec<Vec<_>> = file
             .split_ascii_whitespace()
-            .map(|part| part.chars().collect())
+            .enumerate()
+            .map(|(row, part)| {
+                part.chars()
+                    .enumerate()
+                    .map(|(col, sym)| CharPoint {
+                        sym,
+                        row,
+                        col,
+                        dirs: Self::get_dirs(sym),
+                    })
+                    .collect()
+            })
             .collect();
 
-        let start_row = chars
-            .iter()
-            .position(|row| row.iter().any(|c| *c == 'S'))
-            .unwrap();
-        let start_col = chars[start_row].iter().position(|c| *c == 'S').unwrap();
-        let start = Point::new(start_row, start_col);
+        let start = *points.iter().flatten().find(|cp| cp.sym == 'S').unwrap();
+
+        let mut point_set = HashSet::new();
+        point_set.insert(start);
+
+        let trace_a = Trace {
+            prev: None,
+            curr: start,
+        };
+        let trace_b = trace_a.clone();
 
         Self {
-            chars,
-            left_hist: (None, start),
-            right_hist: (None, start),
-            steps: 0,
+            points,
+            trace_a,
+            trace_b,
+            step_count: 0,
+            point_set,
         }
     }
 
-    fn get(&self, point: &Point) -> Option<&char> {
-        if point.row < 0 || point.col < 0 {
-            return None;
-        }
-
-        self.chars
-            .get(point.row as usize)
-            .and_then(|row| row.get(point.col as usize))
-    }
-
-    #[inline]
-    fn get_connections(pipe: &char) -> Vec<Point> {
-        match pipe {
+    fn get_dirs(c: char) -> Vec<(isize, isize)> {
+        match c {
             'S' => vec![NORTH, SOUTH, EAST, WEST],
             '|' => vec![NORTH, SOUTH],
             '-' => vec![EAST, WEST],
@@ -102,54 +108,77 @@ impl PipeMap {
     }
 
     fn points_match(&self) -> bool {
-        self.left_hist.1 == self.right_hist.1
-            || (self.left_hist.1 == self.right_hist.0.unwrap()
-                && self.right_hist.1 == self.left_hist.0.unwrap())
+        let even_loop_match = self.trace_a.curr == self.trace_b.curr;
+        let odd_loop_match = self.trace_a.curr == self.trace_b.prev.unwrap()
+            && self.trace_b.curr == self.trace_a.prev.unwrap();
+
+        even_loop_match || odd_loop_match
     }
 
-    fn get_next_point(&self, hist: (Option<Point>, Point)) -> Point {
-        let pipe = self.get(&hist.1).unwrap();
-        let dirs = PipeMap::get_connections(pipe);
+    fn get_next_point(&self, trace: &Trace) -> &CharPoint {
+        let (r, c) = trace.curr.get_adj(trace.curr.dirs[0]);
+        let p1 = &self.points[r][c];
 
-        let (p1, p2) = (hist.1.move_by(&dirs[0]), hist.1.move_by(&dirs[1]));
-
-        if p1 != hist.0.unwrap() {
-            p1
+        if p1 == trace.prev.unwrap() {
+            return p1;
         } else {
-            p2
+            let (r, c) = trace.curr.get_adj(trace.curr.dirs[1]);
+            return &self.points[r][c];
         }
     }
 
     fn advance_points(&mut self) {
-        self.steps += 1;
+        self.step_count += 1;
 
-        let new_left = self.get_next_point(self.left_hist);
-        let new_right = self.get_next_point(self.right_hist);
+        let new_a = self.get_next_point(&self.trace_a);
+        self.point_set.insert(&new_a.clone());
+        self.trace_a.prev = Some(&mut self.trace_a.curr);
+        self.trace_a.curr = new_a;
 
-        self.left_hist = (Some(self.left_hist.1), new_left);
-        self.right_hist = (Some(self.right_hist.1), new_right);
+        let new_b = self.get_next_point(&self.trace_b);
+        self.point_set.insert(&new_b.clone());
+        self.trace_b.prev = Some(self.trace_b.curr);
+        self.trace_b.curr = new_b;
     }
 
     fn advance_from_start(&mut self) {
-        self.steps += 1;
+        self.step_count += 1;
 
-        let curr = self.left_hist.1;
-        let mut points = vec![];
+        let mut indices = vec![];
 
-        for direction in PipeMap::get_connections(&'S') {
-            let next = curr.move_by(&direction);
+        for direction in PipeMap::get_dirs(self.trace_a.curr.sym) {
+            let (r, c) = self.trace_a.curr.get_adj(direction);
+            let next = &self.points[r][c];
 
-            if let Some(next_pipe) = self.get(&next) {
-                PipeMap::get_connections(next_pipe).iter().for_each(|dir| {
-                    if next.move_by(dir) == curr {
-                        points.push(next)
-                    }
-                });
-            }
+            PipeMap::get_dirs(next.sym).iter().for_each(|dir| {
+                let (r, c) = next.get_adj(*dir);
+                if &self.points[r][c] == self.trace_a.curr {
+                    indices.push((next.row, next.col))
+                }
+            });
         }
 
-        self.left_hist = (Some(curr), points[0]);
-        self.right_hist = (Some(curr), points[1]);
+        let next = &self.points[indices[0].0][indices[0].1];
+        self.point_set.insert(next);
+        self.trace_a.prev = Some(self.trace_a.curr);
+        self.trace_a.curr = next;
+
+        let next = &self.points[indices[1].0][indices[1].1];
+        self.point_set.insert(next);
+        self.trace_b.prev = Some(self.trace_b.curr);
+        self.trace_b.curr = next;
+    }
+
+    fn count_points_in_loop(&self) -> usize {
+        // self.chars
+        //     .iter()
+        //     .enumerate()
+        //     .fold(0, |outer_sum, (row, vec)| {
+        //         outer_sum + vec.iter().enumerate().fold(0, |sum, (col, item)| {
+        //            sum + vec[..col].
+        //         })
+        //     })
+        0
     }
 }
 
@@ -163,13 +192,20 @@ fn part1(filename: &str) -> usize {
         char_array.advance_points();
     }
 
-    char_array.steps
+    char_array.step_count
 }
 
 fn part2(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
 
-    0
+    let mut char_array = PipeMap::new(&file);
+    char_array.advance_from_start();
+
+    while !char_array.points_match() {
+        char_array.advance_points();
+    }
+
+    char_array.count_points_in_loop()
 }
 
 #[test]
@@ -187,10 +223,15 @@ fn part1_puzzle() {
     assert_eq!(6979, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(5905, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(8, part2("test2.txt"));
+}
+
+#[test]
+fn part2_example1() {
+    assert_eq!(8, part2("test4.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
