@@ -40,76 +40,55 @@ impl Point {
         }
     }
 
-    fn row(&self) -> usize {
-        self.row as usize
-    }
-
-    fn col(&self) -> usize {
-        self.col as usize
-    }
-
     fn move_by(&self, other: &Self) -> Self {
         Self {
             row: self.row + other.row,
             col: self.col + other.col,
         }
     }
-
-    fn delta(&self, other: &Self) -> Self {
-        Self {
-            row: other.row - self.row,
-            col: other.col - self.col,
-        }
-    }
-
-    fn can_be_index(&self) -> bool {
-        self.row >= 0 && self.col >= 0
-    }
 }
 
-struct CharArray {
+struct PipeMap {
     chars: Vec<Vec<char>>,
+    left_hist: (Option<Point>, Point),
+    right_hist: (Option<Point>, Point),
+    steps: usize,
 }
 
-impl CharArray {
+impl PipeMap {
     fn new(file: &str) -> Self {
-        let chars = file
+        let chars: Vec<Vec<char>> = file
             .split_ascii_whitespace()
             .map(|part| part.chars().collect())
             .collect();
 
-        Self { chars }
-    }
-
-    fn find_start(&self) -> Point {
-        let row = self
-            .chars
+        let start_row = chars
             .iter()
-            .position(|row| row.iter().position(|c| *c == 'S').is_some())
+            .position(|row| row.iter().any(|c| *c == 'S'))
             .unwrap();
+        let start_col = chars[start_row].iter().position(|c| *c == 'S').unwrap();
+        let start = Point::new(start_row, start_col);
 
-        let col = self.chars[row].iter().position(|c| *c == 'S').unwrap();
-
-        Point::new(row, col)
+        Self {
+            chars,
+            left_hist: (None, start),
+            right_hist: (None, start),
+            steps: 0,
+        }
     }
 
     fn get(&self, point: &Point) -> Option<&char> {
-        if !point.can_be_index() {
+        if point.row < 0 || point.col < 0 {
             return None;
         }
+
         self.chars
-            .get(point.row())
-            .and_then(|row| row.get(point.col()))
+            .get(point.row as usize)
+            .and_then(|row| row.get(point.col as usize))
     }
 
-    fn get_pipe(&self, point: &Point) -> Option<&char> {
-        self.get(point).and_then(|char| match char {
-            '|' | '-' | 'L' | 'J' | '7' | 'F' | 'S' => Some(char),
-            _ => None,
-        })
-    }
-
-    fn get_directions(pipe: &char) -> Vec<Point> {
+    #[inline]
+    fn get_connections(pipe: &char) -> Vec<Point> {
         match pipe {
             'S' => vec![NORTH, SOUTH, EAST, WEST],
             '|' => vec![NORTH, SOUTH],
@@ -118,81 +97,73 @@ impl CharArray {
             'J' => vec![NORTH, WEST],
             '7' => vec![SOUTH, WEST],
             'F' => vec![SOUTH, EAST],
-            _ => unreachable!("no other chars allowed"),
+            _ => vec![],
         }
     }
 
-    fn is_connected(&self, start_point: &Point, pipe: &char, other_point: &Point) -> Option<Point> {
-        if let Some(other_pipe) = self.get_pipe(other_point) {
-            let other_directions = CharArray::get_directions(other_pipe);
+    fn points_match(&self) -> bool {
+        self.left_hist.1 == self.right_hist.1
+            || (self.left_hist.1 == self.right_hist.0.unwrap()
+                && self.right_hist.1 == self.left_hist.0.unwrap())
+    }
 
-            None
+    fn get_next_point(&self, hist: (Option<Point>, Point)) -> Point {
+        let pipe = self.get(&hist.1).unwrap();
+        let dirs = PipeMap::get_connections(pipe);
+
+        let (p1, p2) = (hist.1.move_by(&dirs[0]), hist.1.move_by(&dirs[1]));
+
+        if p1 != hist.0.unwrap() {
+            p1
         } else {
-            None
+            p2
         }
     }
 
-    fn find_connected_points(&self, point: &Point) -> Vec<Point> {
-        let mut connected_points = vec![];
-        if let Some(pipe) = self.get_pipe(point) {
-            for direction in CharArray::get_directions(pipe) {
-                let other_point = point.move_by(&direction);
-                if let Some(other_pipe) = self.get_pipe(&other_point) {
-                    let other_directions = CharArray::get_directions(other_pipe);
-                    if other_directions
-                        .iter()
-                        .find(|dir| other_point.move_by(dir) == *point)
-                        .is_some()
-                    {
-                        connected_points.push(other_point);
+    fn advance_points(&mut self) {
+        self.steps += 1;
+
+        let new_left = self.get_next_point(self.left_hist);
+        let new_right = self.get_next_point(self.right_hist);
+
+        self.left_hist = (Some(self.left_hist.1), new_left);
+        self.right_hist = (Some(self.right_hist.1), new_right);
+    }
+
+    fn advance_from_start(&mut self) {
+        self.steps += 1;
+
+        let curr = self.left_hist.1;
+        let mut points = vec![];
+
+        for direction in PipeMap::get_connections(&'S') {
+            let next = curr.move_by(&direction);
+
+            if let Some(next_pipe) = self.get(&next) {
+                PipeMap::get_connections(next_pipe).iter().for_each(|dir| {
+                    if next.move_by(dir) == curr {
+                        points.push(next)
                     }
-                }
+                });
             }
         }
-        connected_points
-    }
 
-    fn get_next(&self, point: &Point) -> Point {
-        *self
-            .find_connected_points(point)
-            .iter()
-            .find(|other| *other != point)
-            .unwrap()
+        self.left_hist = (Some(curr), points[0]);
+        self.right_hist = (Some(curr), points[1]);
     }
 }
 
 fn part1(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
-    println!("{file}");
 
-    let char_array = CharArray::new(&file);
+    let mut char_array = PipeMap::new(&file);
+    char_array.advance_from_start();
 
-    let start_point = char_array.find_start();
-    println!("{start_point:?}");
-    let connected_points = char_array.find_connected_points(&start_point);
-    let mut point_1 = connected_points[0];
-    let mut point_2 = connected_points[1];
-
-    println!("{point_1:?} - {point_2:?}");
-
-    point_1 = char_array.get_next(&point_1);
-    point_2 = char_array.get_next(&point_2);
-
-    // TODO: implement something to make sure we don't move backwards
-
-    println!("{point_1:?} - {point_2:?}");
-
-    let mut steps = 0;
-    while point_1 != point_2 {
-        point_1 = char_array.get_next(&point_1);
-        point_2 = char_array.get_next(&point_2);
-
-        println!("{point_1:?} - {point_2:?}");
-        steps += 1;
-        break;
+    while !char_array.points_match() {
+        char_array.advance_points();
     }
 
-    steps
+    char_array.steps
 }
 
 fn part2(filename: &str) -> usize {
@@ -201,20 +172,20 @@ fn part2(filename: &str) -> usize {
     0
 }
 
-// #[test]
-// fn part1_example() {
-//     assert_eq!(8, part1("test1.txt"));
-// }
+#[test]
+fn part1_example() {
+    assert_eq!(8, part1("test1.txt"));
+}
 
 #[test]
 fn part1_example1() {
     assert_eq!(4, part1("test3.txt"));
 }
 
-// #[test]
-// fn part1_puzzle() {
-//     assert_eq!(250058342, part1(PART1_FILE));
-// }
+#[test]
+fn part1_puzzle() {
+    assert_eq!(6979, part1(PART1_FILE));
+}
 
 // #[test]
 // fn part2_example() {
