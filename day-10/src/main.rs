@@ -2,10 +2,10 @@ use std::{collections::HashSet, env};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
-const WEST: (isize, isize) = (0, -1);
-const EAST: (isize, isize) = (0, 1);
-const NORTH: (isize, isize) = (-1, 0);
-const SOUTH: (isize, isize) = (1, 0);
+const WEST: Point = Point { row: 0, col: -1 };
+const EAST: Point = Point { row: 0, col: 1 };
+const NORTH: Point = Point { row: -1, col: 0 };
+const SOUTH: Point = Point { row: 1, col: 0 };
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-10 p<n>";
@@ -26,104 +26,109 @@ fn main() {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
-struct CharPoint {
-    sym: char,
-    row: usize,
-    col: usize,
-    dirs: Vec<(isize, isize)>,
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+struct Point {
+    row: isize,
+    col: isize,
 }
 
-impl CharPoint {
-    fn get_adj(&self, dir: (isize, isize)) -> (usize, usize) {
-        let r = (self.row as isize + dir.0) as usize;
-        let c = (self.col as isize + dir.1) as usize;
-        (r, c)
+impl Point {
+    fn new(row: usize, col: usize) -> Self {
+        Self {
+            row: row as isize,
+            col: col as isize,
+        }
     }
 }
 
-#[derive(Clone)]
-struct Trace<'a> {
-    curr: &'a CharPoint,
-    prev: Option<&'a CharPoint>,
+impl std::ops::Add for Point {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            row: self.row + other.row,
+            col: self.col + other.col,
+        }
+    }
 }
 
-struct PipeMap<'a> {
-    points: Vec<Vec<CharPoint>>,
-    trace_a: Trace<'a>,
-    trace_b: Trace<'a>,
-    point_set: HashSet<&'a CharPoint>,
+fn get_pipe_deltas(pipe: char) -> (Point, Point) {
+    match pipe {
+        '|' => (NORTH, SOUTH),
+        '-' => (EAST, WEST),
+        'L' => (NORTH, EAST),
+        'J' => (NORTH, WEST),
+        '7' => (SOUTH, WEST),
+        'F' => (SOUTH, EAST),
+        _ => unreachable!("impossible pipe: {}", pipe),
+    }
+}
+
+fn is_pipe(pipe: char) -> bool {
+    match pipe {
+        '|' | 'L' | 'J' | '7' | 'F' | 'S' | '-' => true,
+        _ => false,
+    }
+}
+
+struct PipeMap {
+    points: Vec<Vec<char>>,
+    trace_a: Vec<Point>,
+    trace_b: Vec<Point>,
+    point_set: HashSet<Point>,
     step_count: usize,
 }
 
-impl PipeMap<'_> {
+impl PipeMap {
     fn new(file: &str) -> Self {
+        println!("{file}");
         let points: Vec<Vec<_>> = file
             .split_ascii_whitespace()
-            .enumerate()
-            .map(|(row, part)| {
-                part.chars()
-                    .enumerate()
-                    .map(|(col, sym)| CharPoint {
-                        sym,
-                        row,
-                        col,
-                        dirs: Self::get_dirs(sym),
-                    })
-                    .collect()
-            })
+            .map(|part| part.chars().collect())
             .collect();
 
-        let start = *points.iter().flatten().find(|cp| cp.sym == 'S').unwrap();
+        let start = points.iter().flatten().position(|c| *c == 'S').unwrap();
+        let row = start / points.first().unwrap().len();
+        let col = start % points.first().unwrap().len();
+        let start = Point::new(row, col);
 
         let mut point_set = HashSet::new();
         point_set.insert(start);
 
-        let trace_a = Trace {
-            prev: None,
-            curr: start,
-        };
-        let trace_b = trace_a.clone();
+        let trace_a = vec![start];
+        let trace_b = vec![start];
 
         Self {
             points,
             trace_a,
             trace_b,
-            step_count: 0,
             point_set,
-        }
-    }
-
-    fn get_dirs(c: char) -> Vec<(isize, isize)> {
-        match c {
-            'S' => vec![NORTH, SOUTH, EAST, WEST],
-            '|' => vec![NORTH, SOUTH],
-            '-' => vec![EAST, WEST],
-            'L' => vec![NORTH, EAST],
-            'J' => vec![NORTH, WEST],
-            '7' => vec![SOUTH, WEST],
-            'F' => vec![SOUTH, EAST],
-            _ => vec![],
+            step_count: 0,
         }
     }
 
     fn points_match(&self) -> bool {
-        let even_loop_match = self.trace_a.curr == self.trace_b.curr;
-        let odd_loop_match = self.trace_a.curr == self.trace_b.prev.unwrap()
-            && self.trace_b.curr == self.trace_a.prev.unwrap();
+        let curr_a = self.trace_a.last().unwrap();
+        let curr_b = self.trace_b.last().unwrap();
+        if curr_a == curr_b {
+            return true;
+        }
 
-        even_loop_match || odd_loop_match
+        let prev_a = self.trace_a.get(self.trace_a.len() - 2).unwrap();
+        let prev_b = self.trace_b.get(self.trace_b.len() - 2).unwrap();
+
+        curr_a == prev_b && curr_b == prev_a
     }
 
-    fn get_next_point(&self, trace: &Trace) -> &CharPoint {
-        let (r, c) = trace.curr.get_adj(trace.curr.dirs[0]);
-        let p1 = &self.points[r][c];
+    fn get_next_point(&self, trace: &[Point]) -> Point {
+        let curr_p = trace.last().unwrap();
+        let curr_sym = self.get_pipe(curr_p).unwrap();
+        let (d1, d2) = get_pipe_deltas(curr_sym);
 
-        if p1 == trace.prev.unwrap() {
-            return p1;
+        if *curr_p + d1 != *trace.get(trace.len() - 2).unwrap() {
+            *curr_p + d1
         } else {
-            let (r, c) = trace.curr.get_adj(trace.curr.dirs[1]);
-            return &self.points[r][c];
+            *curr_p + d2
         }
     }
 
@@ -131,54 +136,98 @@ impl PipeMap<'_> {
         self.step_count += 1;
 
         let new_a = self.get_next_point(&self.trace_a);
-        self.point_set.insert(&new_a.clone());
-        self.trace_a.prev = Some(&mut self.trace_a.curr);
-        self.trace_a.curr = new_a;
+        self.point_set.insert(new_a);
+        self.trace_a.push(new_a);
 
         let new_b = self.get_next_point(&self.trace_b);
-        self.point_set.insert(&new_b.clone());
-        self.trace_b.prev = Some(self.trace_b.curr);
-        self.trace_b.curr = new_b;
+        self.point_set.insert(new_b);
+        self.trace_b.push(new_b);
+    }
+
+    fn get_pipe(&self, point: &Point) -> Option<char> {
+        if point.row < 0 || point.col < 0 {
+            None
+        } else {
+            let sym = self.points[point.row as usize][point.col as usize];
+            match sym {
+                '|' | '-' | 'L' | 'J' | '7' | 'F' => Some(sym),
+                _ => None,
+            }
+        }
     }
 
     fn advance_from_start(&mut self) {
         self.step_count += 1;
 
-        let mut indices = vec![];
+        let start = *self.trace_a.last().unwrap();
 
-        for direction in PipeMap::get_dirs(self.trace_a.curr.sym) {
-            let (r, c) = self.trace_a.curr.get_adj(direction);
-            let next = &self.points[r][c];
-
-            PipeMap::get_dirs(next.sym).iter().for_each(|dir| {
-                let (r, c) = next.get_adj(*dir);
-                if &self.points[r][c] == self.trace_a.curr {
-                    indices.push((next.row, next.col))
+        let next_points: Vec<Point> = [NORTH, SOUTH, EAST, WEST]
+            .iter()
+            .filter_map(|delta| {
+                let next_p = start + *delta;
+                if let Some(next_sym) = self.get_pipe(&next_p) {
+                    let (d1, d2) = get_pipe_deltas(next_sym);
+                    (next_p + d1 == start || next_p + d2 == start).then_some(next_p)
+                } else {
+                    None
                 }
-            });
-        }
+            })
+            .collect();
 
-        let next = &self.points[indices[0].0][indices[0].1];
-        self.point_set.insert(next);
-        self.trace_a.prev = Some(self.trace_a.curr);
-        self.trace_a.curr = next;
+        let (new_a, new_b) = (next_points[0], next_points[1]);
 
-        let next = &self.points[indices[1].0][indices[1].1];
-        self.point_set.insert(next);
-        self.trace_b.prev = Some(self.trace_b.curr);
-        self.trace_b.curr = next;
+        self.point_set.insert(new_a);
+        self.trace_a.push(new_a);
+
+        self.point_set.insert(new_b);
+        self.trace_b.push(new_b);
     }
 
     fn count_points_in_loop(&self) -> usize {
-        // self.chars
-        //     .iter()
-        //     .enumerate()
-        //     .fold(0, |outer_sum, (row, vec)| {
-        //         outer_sum + vec.iter().enumerate().fold(0, |sum, (col, item)| {
-        //            sum + vec[..col].
-        //         })
-        //     })
-        0
+        self.points.iter().enumerate().fold(0, |sum, (row, vec)| {
+            let s = vec[1..vec.len() - 1]
+                .iter()
+                .enumerate()
+                .scan(
+                    (false, 0),
+                    |(last_was_vertical, crossed_pipes), (col, character)| {
+                        if last_was_vertical {
+                            print!("|");
+                            *crossed_pipes += 1;
+                            Some(0)
+                        } else {
+                            match character {
+                                '-' => { /* don't increment */ }
+                                _ => {
+                                    print!("|");
+                                    *crossed_pipes += 1;
+                                    Some(0)
+                                }
+                            }
+                        }
+                        let p = Point::new(row, col);
+                        if self.point_set.contains(&p) {
+                            // if is_vertical_pipe(*character) {
+                            print!("|");
+                            *crossed_pipes += 1;
+                            Some(0)
+                            // } else {
+                            //     print!("-");
+                            //     Some(0)
+                            // }
+                        } else if *crossed_pipes % 2 != 0 {
+                            print!("+");
+                            Some(1)
+                        } else {
+                            print!(".");
+                            Some(0)
+                        }
+                    },
+                )
+                .sum::<usize>();
+            print!("\n");
+            sum + s
+        })
     }
 }
 
@@ -225,7 +274,7 @@ fn part1_puzzle() {
 
 #[test]
 fn part2_example() {
-    assert_eq!(8, part2("test2.txt"));
+    assert_eq!(4, part2("test2.txt"));
 }
 
 #[test]
