@@ -4,6 +4,9 @@ use std::io::{BufRead, BufReader};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
+const WORKING: char = '.';
+const BROKEN: char = '#';
+const UNKNOWN: char = '?';
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-12 p<n>";
@@ -24,11 +27,150 @@ fn main() {
     }
 }
 
+fn process_line(springs: Vec<&str>, nums: Vec<usize>) -> usize {
+    let mut section_permutations: Vec<usize> = vec![];
+    let mut spring_index = 0;
+    let mut num_index = 0;
+
+    while let Some(spring) = springs.get(spring_index) {
+        let unknown_count = spring.chars().filter(|c| *c == UNKNOWN).count();
+        let broken_count = spring.chars().filter(|c| *c == BROKEN).count();
+
+        if broken_count == nums[num_index] {
+            println!(
+                "complete broken fit {spring:?} with {:?} at {:?}",
+                nums[num_index], num_index
+            );
+            // section_permutations.push(1);
+
+            spring_index += 1;
+            num_index += 1;
+            continue;
+        }
+
+        if unknown_count == nums[num_index] {
+            println!(
+                "complete unknown fit {spring:?} with {:?} at {:?}",
+                nums[num_index], num_index
+            );
+            section_permutations.push(1);
+
+            spring_index += 1;
+            num_index += 1;
+            continue;
+        }
+
+        if unknown_count == nums[num_index] + 1 {
+            println!(
+                "+1 fit {spring:?} with {:?} at {:?}",
+                nums[num_index], num_index
+            );
+            section_permutations.push(2);
+
+            spring_index += 1;
+            num_index += 1;
+            continue;
+        }
+
+        let new_limit = num_index + 2;
+        if let Some(num_slice) = nums.get(num_index..new_limit) {
+            if unknown_count == num_slice.iter().sum::<usize>() + num_slice.len() - 1 {
+                println!(
+                    "multi-fit {spring:?} with {:?} at {:?}",
+                    num_slice,
+                    num_index..new_limit
+                );
+                section_permutations.push(nums[num_index]);
+
+                spring_index += 1;
+                num_index += 2;
+                continue;
+            }
+        }
+
+        spring_index += 1;
+        num_index += 1;
+
+        if num_index >= nums.len() {
+            break;
+        }
+    }
+
+    // let broken_counts: Vec<usize> = springs
+    //     .iter()
+    //     .map(|s| s.chars().filter(|c| *c == BROKEN).count())
+    //     .collect();
+
+    // if broken_counts.len() != springs.len() {
+    //     return (springs.to_vec(), nums.to_vec());
+    // }
+
+    // let mut n_offset = 0;
+    // let mut remove_indices = vec![];
+    // for count in broken_counts {
+    //     if let Some(index) = nums.iter().skip(n_offset).position(|n| *n == count) {
+    //         n_offset = index + n_offset;
+    //         remove_indices.push(n_offset);
+    //         n_offset += 1;
+    //     }
+    // }
+
+    // println!("{remove_indices:?}");
+
+    // for (i, index) in remove_indices.iter().enumerate() {
+    //     springs.remove(*index - i);
+    //     nums.remove(*index - i);
+    // }
+
+    // let (bc_offset, n_offset) = broken_counts
+    //     .iter()
+    //     .enumerate()
+    //     .find_map(|(i, bc)| {
+    //         if let Some(pos) = nums.iter().position(|n| n == bc) {
+    //             Some((i, pos))
+    //         } else {
+    //             None
+    //         }
+    //     })
+    //     .unwrap();
+
+    // println!("{bc_offset:?} {n_offset:?}");
+    // for (index, count) in broken_counts[bc_offset..].iter().enumerate().rev() {
+    //     if *count == 0 {
+    //         continue;
+    //     }
+
+    //     if index >= nums.len() {
+    //         break;
+    //     }
+
+    //     println!("{index:?} {:?}", broken_counts[index]);
+
+    //     if broken_counts[index] == nums[n_offset..][index] {
+    //         springs.remove(index + n_offset);
+    //         nums.remove(index + n_offset);
+    //     }
+    // }
+
+    // (springs, nums)
+    0
+}
+
 fn part1(filename: &str) -> usize {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    0
+    file.lines().fold(0, |sum, line| {
+        let line = line.unwrap();
+        println!("\n{line}");
+        let (springs, nums) = line.split_once(' ').unwrap();
+        let springs: Vec<&str> = springs.split(WORKING).filter(|s| !s.is_empty()).collect();
+        println!("{springs:?}");
+        let nums: Vec<usize> = nums.split(',').map(|n| n.parse().unwrap()).collect();
+        println!("{nums:?}");
+
+        sum + process_line(springs, nums)
+    })
 }
 
 fn part2(filename: &str) -> usize {
