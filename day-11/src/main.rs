@@ -15,7 +15,7 @@ fn main() {
             }
             "p2" => {
                 println!("Reading `{PART2_FILE}`");
-                println!("Sum is {}", part2(PART2_FILE));
+                println!("Sum is {}", part2(PART2_FILE, 1000000));
             }
             _ => eprintln!("{usage}"),
         }
@@ -35,42 +35,25 @@ impl Galaxy {
     }
 }
 
-fn find_empty_rows_cols(image: &Vec<Vec<u8>>) -> (Vec<usize>, Vec<usize>) {
-    let (rows, cols) = (image.len(), image[0].len());
-    // find empty rows
-    let mut empty_rows = vec![];
-    for row in 0..rows {
-        if image[row].iter().all(|b| *b == EMPTY_SPACE) {
-            empty_rows.push(row);
-        }
-    }
-    // find empty cols
-    let mut empty_cols = vec![];
-    for col in 0..cols {
-        if image.iter().map(|row| row[col]).all(|b| b == EMPTY_SPACE) {
-            empty_cols.push(col);
-        }
-    }
-
-    (empty_rows, empty_cols)
-}
-
 fn parse_galaxies(image: &Vec<Vec<u8>>, distance_factor: i64) -> Vec<Galaxy> {
+    let distance_additive = if distance_factor == 1 {
+        1
+    } else {
+        distance_factor - 1
+    };
     let rows: Vec<i64> = (0..image.len())
-        .into_iter()
         .scan(0, |offset, row| {
             if image[row].iter().all(|b| *b == EMPTY_SPACE) {
-                *offset += distance_factor;
+                *offset += distance_additive;
             }
             Some(*offset + row as i64)
         })
         .collect();
 
     let cols: Vec<i64> = (0..image[0].len())
-        .into_iter()
         .scan(0, |offset, col| {
             if image.iter().map(|row| row[col]).all(|b| b == EMPTY_SPACE) {
-                *offset += distance_factor;
+                *offset += distance_additive;
             }
             Some(*offset + col as i64)
         })
@@ -79,7 +62,7 @@ fn parse_galaxies(image: &Vec<Vec<u8>>, distance_factor: i64) -> Vec<Galaxy> {
     image
         .iter()
         .zip(&rows)
-        .map(|(vec, row)| {
+        .flat_map(|(vec, row)| {
             vec.iter()
                 .zip(&cols)
                 .filter_map(|(character, col)| {
@@ -94,11 +77,10 @@ fn parse_galaxies(image: &Vec<Vec<u8>>, distance_factor: i64) -> Vec<Galaxy> {
                 })
                 .collect::<Vec<Galaxy>>()
         })
-        .flatten()
         .collect()
 }
 
-fn sum_galaxy_distances(galaxies: &Vec<Galaxy>) -> u64 {
+fn sum_galaxy_distances(galaxies: &[Galaxy]) -> u64 {
     let mut sum = 0;
     for (i1, g1) in galaxies.iter().enumerate() {
         for g2 in &galaxies[i1..] {
@@ -122,71 +104,18 @@ fn part1(filename: &str) -> u64 {
     sum_galaxy_distances(&galaxies)
 }
 
-fn part2(filename: &str) -> u64 {
+fn part2(filename: &str, distance_factor: i64) -> u64 {
     let file = std::fs::read_to_string(filename).unwrap();
 
     // read image
-    let mut image: Vec<Vec<u8>> = file
+    let image: Vec<Vec<u8>> = file
         .split_ascii_whitespace()
         .map(|row| row.as_bytes().to_vec())
         .collect();
 
-    let (rows, cols) = (image.len(), image[0].len());
-    // find empty rows
-    let mut empty_rows = vec![];
-    for row in 0..rows {
-        if image[row].iter().all(|b| *b == EMPTY_SPACE) {
-            empty_rows.push(row);
-        }
-    }
-    // find empty cols
-    let mut empty_cols = vec![];
-    for col in 0..cols {
-        if image.iter().map(|row| row[col]).all(|b| b == EMPTY_SPACE) {
-            empty_cols.push(col);
-        }
-    }
+    let galaxies = parse_galaxies(&image, distance_factor);
 
-    // add empty cols
-    for row in 0..rows {
-        for col in empty_cols.iter().rev() {
-            image[row].insert(*col, EMPTY_SPACE);
-        }
-    }
-    // add empty rows
-    for row in empty_rows.iter().rev() {
-        image.insert(*row, vec![]);
-    }
-
-    let galaxies: Vec<Galaxy> = image
-        .iter()
-        .enumerate()
-        .map(|(row, vec)| {
-            vec.iter()
-                .enumerate()
-                .filter_map(|(col, byte)| {
-                    if *byte == GALAXY {
-                        Some(Galaxy {
-                            row: row as i64,
-                            col: col as i64,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .flatten()
-        .collect();
-
-    let mut sum = 0;
-    for (i1, g1) in galaxies.iter().enumerate() {
-        for g2 in &galaxies[i1..] {
-            sum += g1.dist(g2);
-        }
-    }
-
-    sum
+    sum_galaxy_distances(&galaxies)
 }
 
 #[test]
@@ -201,10 +130,15 @@ fn part1_puzzle() {
 
 #[test]
 fn part2_example() {
-    assert_eq!(5905, part2("test2.txt"));
+    assert_eq!(1030, part2("test2.txt", 10));
 }
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(250506580, part2(PART2_FILE));
-// }
+#[test]
+fn part2_example1() {
+    assert_eq!(8410, part2("test2.txt", 100));
+}
+
+#[test]
+fn part2_puzzle() {
+    assert_eq!(597714117556, part2(PART2_FILE, 1000000));
+}
