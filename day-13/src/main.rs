@@ -80,8 +80,6 @@ fn part1(filename: &str) -> i64 {
     let mut note = vec![];
     let mut sum = 0;
 
-    // TODO: fix the v0 error
-
     for line in file.lines() {
         let line = line.unwrap();
 
@@ -98,11 +96,75 @@ fn part1(filename: &str) -> i64 {
     sum
 }
 
+fn find_vertical_smudge(notes: &[Vec<u8>]) -> Option<usize> {
+    let axis_range = 1..notes[0].len();
+
+    for axis in axis_range {
+        let left = 0..axis;
+        let right = axis..notes[0].len();
+
+        if left
+            .rev()
+            .zip(right)
+            .all(|(i_left, i_right)| notes.iter().all(|line| line[i_left] == line[i_right]))
+        {
+            return Some(axis);
+        }
+    }
+    None
+}
+
+fn find_horizontal_smudge(notes: &[Vec<u8>]) -> Option<usize> {
+    let axis_range = 1..notes.len();
+
+    for axis in axis_range {
+        let above = &notes[0..axis];
+        let below = &notes[axis..notes.len()];
+
+        if above
+            .iter()
+            .rev()
+            .zip(below)
+            .all(|(s_above, s_below)| s_above == s_below)
+        {
+            return Some(axis);
+        }
+    }
+    None
+}
+
+fn count_lines_smudge(notes: &[Vec<u8>]) -> i64 {
+    if let Some(axis) = find_horizontal_smudge(notes) {
+        return 100 * axis as i64;
+    }
+
+    if let Some(axis) = find_vertical_smudge(notes) {
+        return axis as i64;
+    }
+
+    unreachable!("there is some reflection");
+}
 fn part2(filename: &str) -> i64 {
     let file = File::open(filename).expect("Should be able to read the file");
     let file = BufReader::new(file);
 
-    0
+    let mut note = vec![];
+    let mut sum = 0;
+
+    for line in file.lines() {
+        let line = line.unwrap();
+
+        if !line.is_empty() {
+            note.push(line.into_bytes());
+            continue;
+        }
+
+        sum += count_lines_smudge(&note);
+        note.clear();
+    }
+    sum += count_lines_smudge(&note);
+
+    sum
 }
 
 #[test]
@@ -115,15 +177,15 @@ fn part1_example1() {
     assert_eq!(10, part1("test3.txt"));
 }
 
-// #[test]
-// fn part1_puzzle() {
-//     assert_eq!(1882395907, part1(PART1_FILE));
-// }
+#[test]
+fn part1_puzzle() {
+    assert_eq!(29213, part1(PART1_FILE));
+}
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(2, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(400, part2("test2.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
