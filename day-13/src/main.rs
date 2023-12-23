@@ -106,7 +106,14 @@ fn find_vertical_smudge(notes: &[Vec<u8>]) -> Option<usize> {
         if left
             .rev()
             .zip(right)
-            .all(|(i_left, i_right)| notes.iter().all(|line| line[i_left] == line[i_right]))
+            .map(|(i_left, i_right)| {
+                notes
+                    .iter()
+                    .filter_map(|line| (line[i_left] != line[i_right]).then_some(1))
+                    .sum::<u8>()
+            })
+            .sum::<u8>()
+            == 1
         {
             return Some(axis);
         }
@@ -125,7 +132,15 @@ fn find_horizontal_smudge(notes: &[Vec<u8>]) -> Option<usize> {
             .iter()
             .rev()
             .zip(below)
-            .all(|(s_above, s_below)| s_above == s_below)
+            .map(|(s_above, s_below)| {
+                s_above
+                    .iter()
+                    .zip(s_below)
+                    .filter_map(|(a, b)| (a != b).then_some(1))
+                    .sum::<u8>()
+            })
+            .sum::<u8>()
+            == 1
         {
             return Some(axis);
         }
@@ -187,7 +202,7 @@ fn part2_example() {
     assert_eq!(400, part2("test2.txt"));
 }
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(1005, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(37453, part2(PART2_FILE));
+}
