@@ -30,71 +30,67 @@ fn main() {
 fn process_line(springs: Vec<&str>, nums: Vec<usize>) -> usize {
     let mut section_permutations: Vec<usize> = vec![];
     let mut spring_index = 0;
-    let mut num_index = 0;
+    let mut nums_index = 0;
 
     while let Some(spring) = springs.get(spring_index) {
         let unknown_count = spring.chars().filter(|c| *c == UNKNOWN).count();
         let broken_count = spring.chars().filter(|c| *c == BROKEN).count();
 
-        if broken_count == nums[num_index] {
+        if broken_count == nums[nums_index] {
             println!(
                 "complete broken fit {spring:?} with {:?} at {:?}",
-                nums[num_index], num_index
-            );
-            // section_permutations.push(1);
-
-            spring_index += 1;
-            num_index += 1;
-            continue;
-        }
-
-        if unknown_count == nums[num_index] {
-            println!(
-                "complete unknown fit {spring:?} with {:?} at {:?}",
-                nums[num_index], num_index
+                nums[nums_index], nums_index
             );
             section_permutations.push(1);
-
-            spring_index += 1;
-            num_index += 1;
-            continue;
-        }
-
-        if unknown_count == nums[num_index] + 1 {
+        } else if unknown_count == nums[nums_index] {
+            println!(
+                "complete unknown fit {spring:?} with {:?} at {:?}",
+                nums[nums_index], nums_index
+            );
+            section_permutations.push(1);
+        } else if unknown_count == nums[nums_index] + 1 {
             println!(
                 "+1 fit {spring:?} with {:?} at {:?}",
-                nums[num_index], num_index
+                nums[nums_index], nums_index
             );
-            section_permutations.push(2);
-
-            spring_index += 1;
-            num_index += 1;
-            continue;
+            section_permutations.push(nums[nums_index] + 1);
+        } else if unknown_count + broken_count == nums[nums_index] {
+            println!(
+                "broken + unknown fit {spring:?} with {:?} at {:?}",
+                nums[nums_index], nums_index
+            );
+            section_permutations.push(1);
         }
 
-        let new_limit = num_index + 2;
-        if let Some(num_slice) = nums.get(num_index..new_limit) {
+        spring_index += 1;
+        nums_index += 1;
+        continue;
+
+        let new_limit = nums_index + 2;
+        if let Some(num_slice) = nums.get(nums_index..new_limit) {
             if unknown_count == num_slice.iter().sum::<usize>() + num_slice.len() - 1 {
                 println!(
                     "multi-fit {spring:?} with {:?} at {:?}",
                     num_slice,
-                    num_index..new_limit
+                    nums_index..new_limit
                 );
-                section_permutations.push(nums[num_index]);
+                section_permutations.push(nums[nums_index]);
 
                 spring_index += 1;
-                num_index += 2;
+                nums_index += 2;
                 continue;
             }
         }
 
         spring_index += 1;
-        num_index += 1;
+        nums_index += 1;
 
-        if num_index >= nums.len() {
+        if nums_index >= nums.len() {
             break;
         }
     }
+
+    println!("Done at s:{:?}, n:{:?} left", spring_index, nums_index);
 
     // let broken_counts: Vec<usize> = springs
     //     .iter()
@@ -153,7 +149,9 @@ fn process_line(springs: Vec<&str>, nums: Vec<usize>) -> usize {
     // }
 
     // (springs, nums)
-    0
+    let p = section_permutations.iter().product();
+    println!("result: {p:?}");
+    p
 }
 
 fn part1(filename: &str) -> usize {
