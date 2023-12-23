@@ -25,7 +25,7 @@ fn main() {
 }
 
 fn find_vertical_reflection_axis(notes: &[Vec<u8>]) -> Option<usize> {
-    let axis_range = 1..notes[0].len() - 2;
+    let axis_range = 1..notes[0].len();
 
     for axis in axis_range {
         let left = 0..axis;
@@ -39,11 +39,11 @@ fn find_vertical_reflection_axis(notes: &[Vec<u8>]) -> Option<usize> {
             return Some(axis);
         }
     }
-    Some(0)
+    None
 }
 
 fn find_horizontal_reflection_axis(notes: &[Vec<u8>]) -> Option<usize> {
-    let axis_range = 1..notes.len() - 2;
+    let axis_range = 1..notes.len();
 
     for axis in axis_range {
         let above = &notes[0..axis];
@@ -63,12 +63,10 @@ fn find_horizontal_reflection_axis(notes: &[Vec<u8>]) -> Option<usize> {
 
 fn count_lines_before_reflection(notes: &[Vec<u8>]) -> i64 {
     if let Some(axis) = find_horizontal_reflection_axis(notes) {
-        println!("h {axis:?}");
         return 100 * axis as i64;
     }
 
     if let Some(axis) = find_vertical_reflection_axis(notes) {
-        println!("v {axis:?}");
         return axis as i64;
     }
 
@@ -92,9 +90,6 @@ fn part1(filename: &str) -> i64 {
             continue;
         }
 
-        note.iter()
-            .for_each(|line| println!("{}", String::from_utf8(line.clone()).unwrap()));
-
         sum += count_lines_before_reflection(&note);
         note.clear();
     }
@@ -113,6 +108,11 @@ fn part2(filename: &str) -> i64 {
 #[test]
 fn part1_example() {
     assert_eq!(405, part1("test1.txt"));
+}
+
+#[test]
+fn part1_example1() {
+    assert_eq!(10, part1("test3.txt"));
 }
 
 // #[test]
