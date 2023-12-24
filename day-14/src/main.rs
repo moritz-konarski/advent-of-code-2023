@@ -1,6 +1,4 @@
 use std::env;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Lines};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
@@ -24,16 +22,26 @@ fn main() {
     }
 }
 
+fn tilt_north(lines: &mut [&[u8]]) ->
+
 fn part1(filename: &str) -> usize {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
+    let lines: Vec<_> = std::fs::read_to_string(filename)
+        .unwrap()
+        .split_ascii_whitespace()
+        .map(|line| line.as_bytes())
+        .collect();
+
+    // read in the data
+    // tilt all the rocks north
+    // O moves, . is empty, # does not move
+    // calculate load for O as len() - row for each O
 
     0
 }
 
 fn part2(filename: &str) -> usize {
-    let file = File::open(filename).expect("Should be able to read the file");
-    let file = BufReader::new(file);
+    // let file = File::open(filename).expect("Should be able to read the file");
+    // let file = BufReader::new(file);
 
     0
 }
