@@ -26,32 +26,27 @@ fn main() {
 }
 
 fn tilt_north(lines: &mut [Vec<u8>]) {
-    let mut empty_index: Option<usize>;
+    let mut empty_tracker: Vec<Option<usize>> = (0..lines[0].len()).map(|_| None).collect();
 
-    for col in 0..lines[0].len() {
-        empty_index = None;
-
-        for row in 0..lines.len() {
-            // TODO: make 2nd match where empty_index is incremented separately
-
+    for row in 0..lines.len() {
+        for col in 0..lines[0].len() {
             match lines[row][col] {
                 EMPTY => {
-                    if empty_index.is_none() {
-                        empty_index = Some(row);
+                    if empty_tracker[col].is_none() {
+                        empty_tracker[col] = Some(row);
                     }
                 }
-                CUBE => {
-                    empty_index = None;
-                }
+                CUBE => empty_tracker[col] = None,
                 ROUND => {
-                    if let Some(index) = empty_index {
+                    if let Some(row_index) = empty_tracker[col] {
                         lines[row][col] = EMPTY;
-                        lines[index][col] = ROUND;
+                        lines[row_index][col] = ROUND;
 
-                        empty_index = Some(row);
+                        empty_tracker[col] =
+                            (row_index + 1..row + 1).find(|i| lines[*i][col] == EMPTY);
                     }
                 }
-                _ => unreachable!("no other shapes"),
+                _ => unreachable!("impossible symbol {:?}", lines[row][col]),
             }
         }
     }
@@ -70,8 +65,6 @@ fn part1(filename: &str) -> usize {
     println!();
 
     tilt_north(&mut lines);
-    // O moves, . is empty, # does not move
-    // calculate load for O as len() - row for each O
 
     lines
         .iter()
