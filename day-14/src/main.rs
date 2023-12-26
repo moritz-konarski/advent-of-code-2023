@@ -26,30 +26,39 @@ fn main() {
 }
 
 fn tilt_north(lines: &mut [Vec<u8>]) {
-    let mut empty_tracker: Vec<Option<usize>> = (0..lines[0].len()).map(|_| None).collect();
+    let mut empty_tracker: Vec<_> = (0..lines[0].len()).map(|_| None).collect();
 
     for row in 0..lines.len() {
-        for col in 0..lines[0].len() {
+        for (col, empty_index) in empty_tracker.iter_mut().enumerate() {
             match lines[row][col] {
                 EMPTY => {
-                    if empty_tracker[col].is_none() {
-                        empty_tracker[col] = Some(row);
+                    if empty_index.is_none() {
+                        *empty_index = Some(row);
                     }
                 }
-                CUBE => empty_tracker[col] = None,
+                CUBE => *empty_index = None,
                 ROUND => {
-                    if let Some(row_index) = empty_tracker[col] {
+                    if let Some(row_index) = empty_index {
                         lines[row][col] = EMPTY;
-                        lines[row_index][col] = ROUND;
+                        lines[*row_index][col] = ROUND;
 
-                        empty_tracker[col] =
-                            (row_index + 1..row + 1).find(|i| lines[*i][col] == EMPTY);
+                        *empty_index = (*row_index + 1..row + 1).find(|i| lines[*i][col] == EMPTY);
                     }
                 }
                 _ => unreachable!("impossible symbol {:?}", lines[row][col]),
             }
         }
     }
+}
+
+fn count_rounds(lines: &[Vec<u8>]) -> usize {
+    lines
+        .iter()
+        .rev()
+        .enumerate()
+        .fold(0, |sum, (weight, line)| {
+            sum + (weight + 1) * line.iter().filter(|sym| **sym == ROUND).count()
+        })
 }
 
 fn part1(filename: &str) -> usize {
@@ -59,21 +68,12 @@ fn part1(filename: &str) -> usize {
         .map(|line| line.as_bytes().to_vec())
         .collect();
 
-    lines
-        .iter()
-        .for_each(|l| println!("{}", String::from_utf8(l.clone()).unwrap()));
-    println!();
-
     tilt_north(&mut lines);
 
-    lines
-        .iter()
-        .for_each(|l| println!("{}", String::from_utf8(l.clone()).unwrap()));
-
-    0
+    count_rounds(&lines)
 }
 
-fn part2(filename: &str) -> usize {
+fn part2(_filename: &str) -> usize {
     // let file = File::open(filename).expect("Should be able to read the file");
     // let file = BufReader::new(file);
 
@@ -85,10 +85,10 @@ fn part1_example() {
     assert_eq!(136, part1("test1.txt"));
 }
 
-// #[test]
-// fn part1_puzzle() {
-//     assert_eq!(227653707, part1(PART1_FILE));
-// }
+#[test]
+fn part1_puzzle() {
+    assert_eq!(108813, part1(PART1_FILE));
+}
 
 // #[test]
 // fn part2_example() {
