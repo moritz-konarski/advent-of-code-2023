@@ -1,3 +1,4 @@
+use core::panic;
 use std::env;
 use transpose;
 
@@ -17,8 +18,7 @@ fn main() {
             }
             "p2" => {
                 println!("Reading `{PART2_FILE}`");
-                // println!("Sum is {}", part2(PART2_FILE));
-                println!("Sum is {}", part2("test2.txt"));
+                println!("Sum is {}", part2(PART2_FILE));
             }
             _ => eprintln!("{usage}"),
         }
@@ -29,35 +29,55 @@ fn main() {
 
 struct Array {
     data: Vec<u8>,
-    width: usize,
-    height: usize,
+    scratch: Vec<u8>,
+    empty_tracker: Vec<Option<usize>>,
+    dim: usize,
+}
+
+impl std::fmt::Debug for Array {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let array: String = self
+            .data
+            .chunks_exact(self.dim)
+            .map(|chunk| {
+                let mut s = String::from_utf8(chunk.to_vec()).unwrap();
+                s.push('\n');
+                s
+            })
+            .collect();
+        write!(f, "{array}")
+    }
 }
 
 impl Array {
     fn new(file: &String) -> Self {
-        let data: Vec<_> = file
-            .split_ascii_whitespace()
-            .map(|line| line.as_bytes().to_vec())
-            .collect();
+        let lines: Vec<_> = file.split_ascii_whitespace().collect();
+        let width = lines[0].len();
+        let height = lines.len();
 
-        let width = data[0].len();
-        let height = data.len();
+        if width != height {
+            panic!("input must be square!");
+        }
 
-        let data = data.iter().flat_map(|e| e.clone()).collect();
+        let data = lines.iter().flat_map(|line| line.bytes()).collect();
+        let empty_tracker = (0..width).map(|_| None).collect();
 
         Self {
             data,
-            width,
-            height,
+            scratch: vec![0; width],
+            empty_tracker,
+            dim: width,
         }
     }
 
     fn tilt_north(&mut self) {
-        let mut empty_tracker: Vec<_> = (0..self.width).map(|_| None).collect();
+        // reset tracker
+        self.empty_tracker.iter_mut().for_each(|el| *el = None);
 
-        for row in 0..self.height {
-            for (col, empty_index) in empty_tracker.iter_mut().enumerate() {
-                match self.get(row, col) {
+        // go through all rows top to bottom
+        for row in 0..self.dim {
+            for (col, empty_index) in self.empty_tracker.iter_mut().enumerate() {
+                match self.data[self.dim * row + col] {
                     EMPTY => {
                         if empty_index.is_none() {
                             *empty_index = Some(row);
@@ -66,170 +86,39 @@ impl Array {
                     CUBE => *empty_index = None,
                     ROUND => {
                         if let Some(row_index) = empty_index {
-                            self.set(row, col, EMPTY);
-                            self.set(*row_index, col, ROUND);
+                            self.data[self.dim * row + col] = EMPTY;
+                            self.data[self.dim * *row_index + col] = ROUND;
 
-                            *empty_index =
-                                (*row_index + 1..row + 1).find(|i| self.get(*i, col) == EMPTY);
+                            *empty_index = (*row_index + 1..row + 1)
+                                .find(|i| self.data[self.dim * *i + col] == EMPTY);
                         }
                     }
-                    _ => unreachable!("impossible symbol {:?}", self.get(row, col)),
+                    _ => unreachable!("impossible symbol {:?}", self.data[self.dim * row + col]),
                 }
             }
         }
-    }
-
-    fn get(&self, row: usize, col: usize) -> u8 {
-        self.data[self.width * row + col]
-    }
-
-    fn set(&mut self, row: usize, col: usize, value: u8) {
-        self.data[self.width * row + col] = value;
     }
 
     fn count_rounds(&self) -> usize {
-        let mut sum = 0;
-        let mut round_count;
-
-        for row in (0..self.height).rev() {
-            round_count = 0;
-            for col in 0..self.width {
-                if self.get(row, col) == ROUND {
-                    round_count += 1;
-                }
-            }
-            sum += (row + 1) * round_count;
-        }
-
-        sum
+        self.data
+            .chunks(self.dim)
+            .rev()
+            .enumerate()
+            .fold(0, |sum, (rank, chunk)| {
+                sum + (rank + 1) * chunk.iter().filter(|el| **el == ROUND).count()
+            })
     }
 
     fn rotate_counter_clockwise(&mut self) {
-        let mut scratch = vec![0; self.width.max(self.height)];
-        transpose::transpose_inplace(&mut self.data, &mut scratch, self.width, self.height);
-
-        let t = self.height;
-        self.height = self.width;
-        self.width = t;
+        transpose::transpose_inplace(&mut self.data, &mut self.scratch, self.dim, self.dim);
     }
-}
 
-fn tilt_north(lines: &mut [Vec<u8>]) {
-    let mut empty_tracker: Vec<_> = (0..lines[0].len()).map(|_| None).collect();
-
-    for row in 0..lines.len() {
-        for (col, empty_index) in empty_tracker.iter_mut().enumerate() {
-            match lines[row][col] {
-                EMPTY => {
-                    if empty_index.is_none() {
-                        *empty_index = Some(row);
-                    }
-                }
-                CUBE => *empty_index = None,
-                ROUND => {
-                    if let Some(row_index) = empty_index {
-                        lines[row][col] = EMPTY;
-                        lines[*row_index][col] = ROUND;
-
-                        *empty_index = (*row_index + 1..row + 1).find(|i| lines[*i][col] == EMPTY);
-                    }
-                }
-                _ => unreachable!("impossible symbol {:?}", lines[row][col]),
-            }
+    fn rotate_n(&mut self, count: usize) {
+        for _ in 0..count {
+            self.tilt_north();
+            self.rotate_counter_clockwise();
         }
     }
-}
-
-fn tilt_south(lines: &mut [Vec<u8>]) {
-    let mut empty_tracker: Vec<_> = (0..lines[0].len()).map(|_| None).collect();
-
-    for row in (0..lines.len()).rev() {
-        for (col, empty_index) in empty_tracker.iter_mut().enumerate() {
-            match lines[row][col] {
-                EMPTY => {
-                    if empty_index.is_none() {
-                        *empty_index = Some(row);
-                    }
-                }
-                CUBE => *empty_index = None,
-                ROUND => {
-                    if let Some(row_index) = empty_index {
-                        lines[row][col] = EMPTY;
-                        lines[*row_index][col] = ROUND;
-
-                        *empty_index = (row..*row_index + 1)
-                            .rev()
-                            .find(|i| lines[*i][col] == EMPTY);
-                    }
-                }
-                _ => unreachable!("impossible symbol {:?}", lines[row][col]),
-            }
-        }
-    }
-}
-
-fn tilt_west(lines: &mut [Vec<u8>]) {
-    let mut empty_tracker: Vec<_> = (0..lines.len()).map(|_| None).collect();
-
-    for col in 0..lines[0].len() {
-        for (row, empty_index) in empty_tracker.iter_mut().enumerate() {
-            match lines[row][col] {
-                EMPTY => {
-                    if empty_index.is_none() {
-                        *empty_index = Some(col);
-                    }
-                }
-                CUBE => *empty_index = None,
-                ROUND => {
-                    if let Some(col_index) = empty_index {
-                        lines[row][col] = EMPTY;
-                        lines[row][*col_index] = ROUND;
-
-                        *empty_index = (*col_index + 1..col + 1).find(|i| lines[row][*i] == EMPTY);
-                    }
-                }
-                _ => unreachable!("impossible symbol {:?}", lines[row][col]),
-            }
-        }
-    }
-}
-
-fn tilt_east(lines: &mut [Vec<u8>]) {
-    let mut empty_tracker: Vec<_> = (0..lines.len()).rev().map(|_| None).collect();
-
-    for col in (0..lines[0].len()).rev() {
-        for (row, empty_index) in empty_tracker.iter_mut().enumerate() {
-            match lines[row][col] {
-                EMPTY => {
-                    if empty_index.is_none() {
-                        *empty_index = Some(col);
-                    }
-                }
-                CUBE => *empty_index = None,
-                ROUND => {
-                    if let Some(col_index) = empty_index {
-                        lines[row][col] = EMPTY;
-                        lines[row][*col_index] = ROUND;
-
-                        *empty_index = (col..*col_index + 1)
-                            .rev()
-                            .find(|i| lines[row][*i] == EMPTY);
-                    }
-                }
-                _ => unreachable!("impossible symbol {:?}", lines[row][col]),
-            }
-        }
-    }
-}
-
-fn count_rounds(lines: &[Vec<u8>]) -> usize {
-    lines
-        .iter()
-        .rev()
-        .enumerate()
-        .fold(0, |sum, (weight, line)| {
-            sum + (weight + 1) * line.iter().filter(|sym| **sym == ROUND).count()
-        })
 }
 
 fn part1(filename: &str) -> usize {
@@ -240,41 +129,15 @@ fn part1(filename: &str) -> usize {
     a.tilt_north();
 
     a.count_rounds()
-    // let mut lines: Vec<_> = file
-    //     .split_ascii_whitespace()
-    //     .map(|line| line.as_bytes().to_vec())
-    //     .collect();
-
-    // tilt_north(&mut lines);
-
-    // count_rounds(&lines)
 }
 
 fn part2(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
-    let mut lines: Vec<_> = file
-        .split_ascii_whitespace()
-        .map(|line| line.as_bytes().to_vec())
-        .collect();
+    let mut a = Array::new(&file);
 
-    for i in 1..1_000_000_000 {
-        // for i in 0..3 {
-        tilt_north(&mut lines);
-        tilt_west(&mut lines);
-        tilt_south(&mut lines);
-        tilt_east(&mut lines);
+    a.rotate_n(1_000_000_000);
 
-        // lines
-        //     .iter()
-        //     .for_each(|line| println!("{}", String::from_utf8(line.clone()).unwrap()));
-        // println!();
-
-        if i % 100 == 0 {
-            println!("{:?}", count_rounds(&lines));
-        }
-    }
-
-    count_rounds(&lines)
+    a.count_rounds()
 }
 
 #[test]
@@ -286,6 +149,42 @@ fn part1_example() {
 fn part1_puzzle() {
     assert_eq!(108813, part1(PART1_FILE));
 }
+
+// #[test]
+// fn part2_example_1r() {
+//     let result = std::fs::read_to_string("test3.txt").unwrap();
+//     let r = Array::new(&result);
+
+//     let file = std::fs::read_to_string("test1.txt").unwrap();
+//     let mut a = Array::new(&file);
+//     a.rotate_n(1);
+
+//     assert_eq!(r.data, a.data);
+// }
+
+// #[test]
+// fn part2_example_2r() {
+//     let result = std::fs::read_to_string("test4.txt").unwrap();
+//     let r = Array::new(&result);
+
+//     let file = std::fs::read_to_string("test1.txt").unwrap();
+//     let mut a = Array::new(&file);
+//     a.rotate_n(2);
+
+//     assert_eq!(r.data, a.data);
+// }
+
+// #[test]
+// fn part2_example_3r() {
+//     let result = std::fs::read_to_string("test5.txt").unwrap();
+//     let r = Array::new(&result);
+
+//     let file = std::fs::read_to_string("test1.txt").unwrap();
+//     let mut a = Array::new(&file);
+//     a.rotate_n(3);
+
+//     assert_eq!(r.data, a.data);
+// }
 
 // #[test]
 // fn part2_example() {
