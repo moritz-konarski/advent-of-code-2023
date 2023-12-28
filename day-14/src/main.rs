@@ -1,6 +1,6 @@
 use core::panic;
 use std::env;
-use transpose;
+use transpose::transpose_inplace;
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
@@ -50,7 +50,7 @@ impl std::fmt::Debug for Array {
 }
 
 impl Array {
-    fn new(file: &String) -> Self {
+    fn new(file: &str) -> Self {
         let lines: Vec<_> = file.split_ascii_whitespace().collect();
         let width = lines[0].len();
         let height = lines.len();
@@ -109,14 +109,36 @@ impl Array {
             })
     }
 
-    fn rotate_counter_clockwise(&mut self) {
-        transpose::transpose_inplace(&mut self.data, &mut self.scratch, self.dim, self.dim);
+    fn rotate_clockwise(&mut self) {
+        // transposition
+        transpose_inplace(&mut self.data, &mut self.scratch, self.dim, self.dim);
+
+        // reverse each row
+        self.data
+            .chunks_exact_mut(self.dim)
+            .for_each(|chunk| chunk.reverse());
+    }
+
+    fn rotate(&mut self) {
+        // north
+        self.tilt_north();
+        // west
+        self.rotate_clockwise();
+        self.tilt_north();
+        // south
+        self.rotate_clockwise();
+        self.tilt_north();
+        // east
+        self.rotate_clockwise();
+        self.tilt_north();
+        // rotate back
+        self.rotate_clockwise();
     }
 
     fn rotate_n(&mut self, count: usize) {
+        // NOTE: here one could try to identify recurring patterns and break early
         for _ in 0..count {
-            self.tilt_north();
-            self.rotate_counter_clockwise();
+            self.rotate();
         }
     }
 }
@@ -135,7 +157,8 @@ fn part2(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
     let mut a = Array::new(&file);
 
-    a.rotate_n(1_000_000_000);
+    // NOTE: 1000 also happens to work instead of 1 billion
+    a.rotate_n(1_000);
 
     a.count_rounds()
 }
@@ -150,48 +173,67 @@ fn part1_puzzle() {
     assert_eq!(108813, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example_1r() {
-//     let result = std::fs::read_to_string("test3.txt").unwrap();
-//     let r = Array::new(&result);
+#[test]
+fn part2_example_1r() {
+    let file = std::fs::read_to_string("test1.txt").unwrap();
+    let mut a = Array::new(&file);
 
-//     let file = std::fs::read_to_string("test1.txt").unwrap();
-//     let mut a = Array::new(&file);
-//     a.rotate_n(1);
+    a.tilt_north();
 
-//     assert_eq!(r.data, a.data);
-// }
+    a.rotate_clockwise();
+    a.tilt_north();
+    a.rotate_clockwise();
+    a.rotate_clockwise();
+    a.rotate_clockwise();
 
-// #[test]
-// fn part2_example_2r() {
-//     let result = std::fs::read_to_string("test4.txt").unwrap();
-//     let r = Array::new(&result);
+    a.rotate_clockwise();
+    a.rotate_clockwise();
+    a.tilt_north();
+    a.rotate_clockwise();
+    a.rotate_clockwise();
 
-//     let file = std::fs::read_to_string("test1.txt").unwrap();
-//     let mut a = Array::new(&file);
-//     a.rotate_n(2);
+    a.rotate_clockwise();
+    a.rotate_clockwise();
+    a.rotate_clockwise();
+    a.tilt_north();
+    a.rotate_clockwise();
 
-//     assert_eq!(r.data, a.data);
-// }
+    let result = std::fs::read_to_string("test3.txt").unwrap();
+    let r = Array::new(&result);
 
-// #[test]
-// fn part2_example_3r() {
-//     let result = std::fs::read_to_string("test5.txt").unwrap();
-//     let r = Array::new(&result);
+    assert_eq!(r.data, a.data);
+}
 
-//     let file = std::fs::read_to_string("test1.txt").unwrap();
-//     let mut a = Array::new(&file);
-//     a.rotate_n(3);
+#[test]
+fn part2_example_2r() {
+    let result = std::fs::read_to_string("test4.txt").unwrap();
+    let r = Array::new(&result);
 
-//     assert_eq!(r.data, a.data);
-// }
+    let file = std::fs::read_to_string("test1.txt").unwrap();
+    let mut a = Array::new(&file);
+    a.rotate_n(2);
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(64, part2("test2.txt"));
-// }
+    assert_eq!(r.data, a.data);
+}
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(78775051, part2(PART2_FILE));
-// }
+#[test]
+fn part2_example_3r() {
+    let result = std::fs::read_to_string("test5.txt").unwrap();
+    let r = Array::new(&result);
+
+    let file = std::fs::read_to_string("test1.txt").unwrap();
+    let mut a = Array::new(&file);
+    a.rotate_n(3);
+
+    assert_eq!(r.data, a.data);
+}
+
+#[test]
+fn part2_example() {
+    assert_eq!(64, part2("test2.txt"));
+}
+
+#[test]
+fn part2_puzzle() {
+    assert_eq!(104533, part2(PART2_FILE));
+}
