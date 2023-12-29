@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::{collections::HashSet, env};
 
 const PART1_FILE: &str = "part1.txt";
@@ -82,13 +83,10 @@ struct Beam {
 }
 
 impl Beam {
-    fn new() -> Self {
+    fn new(start_pos: Vector, start_dir: Vector) -> Self {
         Self {
-            direction: RIGHT,
-            position: Vector {
-                d_row: 0,
-                d_col: -1,
-            },
+            direction: start_dir,
+            position: start_pos,
         }
     }
 
@@ -96,8 +94,8 @@ impl Beam {
         self.position = self.position + self.direction;
     }
 
-    fn is_negative(&self) -> bool {
-        self.position.d_row < 0 || self.position.d_col < 0
+    fn in_bounds(&self) -> bool {
+        self.position.d_row >= 0 && self.position.d_col >= 0
     }
 
     fn row(&self) -> usize {
@@ -108,27 +106,66 @@ impl Beam {
         self.position.d_col as usize
     }
 
-    fn turn(self, new_dir: Turn) -> Option<Vec<Self>> {
-        let new_self = Self {
-            direction: self.direction.turn(new_dir),
-            position: self.position,
-        };
-
-        Some(vec![new_self])
+    fn turn(&mut self, new_dir: Turn) {
+        self.direction = self.direction.turn(new_dir);
     }
 
-    fn split(self) -> Option<Vec<Self>> {
-        let left = Beam {
-            direction: self.direction.turn(Turn::Left),
-            position: self.position,
-        };
-        let right = Beam {
+    fn split(&mut self) -> Self {
+        let new_beam = Self {
             direction: self.direction.turn(Turn::Right),
             position: self.position,
         };
 
-        Some(vec![left, right])
+        self.turn(Turn::Left);
+
+        new_beam
     }
+}
+
+fn count_tiles(first_beam: Beam, contraption: &[Vec<char>], rows: usize, cols: usize) -> usize {
+    let mut beams = vec![first_beam];
+    let mut visited_tiles = HashSet::new();
+    let mut visited_tiles_counts = vec![0; 5];
+
+    while !beams.is_empty() {
+        // advance beams
+        beams.iter_mut().for_each(|b| b.advance());
+
+        // filter out beams that are out of bounds
+        beams.retain(|b| b.in_bounds() && b.row() < rows && b.col() < cols);
+
+        // collect visited positions
+        beams.iter().for_each(|b| {
+            visited_tiles.insert(b.position);
+        });
+
+        let mut new_beams = vec![];
+        // interact with environment
+        beams
+            .iter_mut()
+            .for_each(|b| match (contraption[b.row()][b.col()], b.direction) {
+                ('|', LEFT) | ('|', RIGHT) | ('-', UP) | ('-', DOWN) => {
+                    let new_beam = b.split();
+                    new_beams.push(new_beam);
+                }
+                ('/', LEFT) | ('/', RIGHT) | ('\\', UP) | ('\\', DOWN) => b.turn(Turn::Left),
+                ('/', UP) | ('/', DOWN) | ('\\', LEFT) | ('\\', RIGHT) => b.turn(Turn::Right),
+                (_, _) => (),
+            });
+
+        // combine new beams with our list
+        beams.extend(new_beams);
+
+        // ensure that we don't get stuck in loops
+        let visited_count = visited_tiles.len();
+        if visited_tiles_counts.iter().all(|e| *e == visited_count) {
+            println!("break because equal");
+            break;
+        }
+        visited_tiles_counts.remove(0);
+        visited_tiles_counts.push(visited_count);
+    }
+    visited_tiles.len()
 }
 
 fn part1(filename: &str) -> usize {
@@ -137,50 +174,17 @@ fn part1(filename: &str) -> usize {
         .split_ascii_whitespace()
         .map(|line| line.chars().collect())
         .collect();
-    let (row_count, col_count) = (contraption.len(), contraption[0].len());
+    let (rows, cols) = (contraption.len(), contraption[0].len());
 
-    let mut beams = vec![Beam::new()];
-    let mut visited_tiles = HashSet::new();
+    let first_beam = Beam::new(
+        Vector {
+            d_row: 0,
+            d_col: -1,
+        },
+        RIGHT,
+    );
 
-    let mut last_visited_counts = vec![0; 10];
-
-    while !beams.is_empty() {
-        beams = beams
-            .iter_mut()
-            .filter_map(|beam| {
-                beam.advance();
-
-                // remove a beam if it is out of bounds
-                if beam.is_negative() || beam.row() >= row_count || beam.col() >= col_count {
-                    return None;
-                }
-
-                // track the tile as visited
-                visited_tiles.insert(beam.position);
-
-                // interact with environment
-                match (contraption[beam.row()][beam.col()], beam.direction) {
-                    ('|', LEFT) | ('|', RIGHT) => beam.split(),
-                    ('-', UP) | ('-', DOWN) => beam.split(),
-                    ('/', LEFT) | ('/', RIGHT) => beam.turn(Turn::Left),
-                    ('/', UP) | ('/', DOWN) => beam.turn(Turn::Right),
-                    ('\\', LEFT) | ('\\', RIGHT) => beam.turn(Turn::Right),
-                    ('\\', UP) | ('\\', DOWN) => beam.turn(Turn::Left),
-                    (_, _) => Some(vec![*beam]),
-                }
-            })
-            .flatten()
-            .collect();
-
-        let visited_count = visited_tiles.len();
-        if last_visited_counts.iter().all(|e| *e == visited_count) {
-            break;
-        }
-        last_visited_counts.remove(0);
-        last_visited_counts.push(visited_count);
-    }
-
-    visited_tiles.len()
+    count_tiles(first_beam, &contraption, rows, cols)
 }
 
 fn part2(filename: &str) -> usize {
