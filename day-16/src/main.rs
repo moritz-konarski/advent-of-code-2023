@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use std::{collections::HashSet, env};
 
 const PART1_FILE: &str = "part1.txt";
@@ -159,7 +158,6 @@ fn count_tiles(first_beam: Beam, contraption: &[Vec<char>], rows: usize, cols: u
         // ensure that we don't get stuck in loops
         let visited_count = visited_tiles.len();
         if visited_tiles_counts.iter().all(|e| *e == visited_count) {
-            println!("break because equal");
             break;
         }
         visited_tiles_counts.remove(0);
@@ -189,15 +187,55 @@ fn part1(filename: &str) -> usize {
 
 fn part2(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
+    let contraption: Vec<Vec<_>> = file
+        .split_ascii_whitespace()
+        .map(|line| line.chars().collect())
+        .collect();
+    let (rows, cols) = (contraption.len(), contraption[0].len());
 
-    // beam enters (0, 0) coming from (-1, 0)
-    // then bounces around the chamber
-    // ignores .
-    // / and \ are mirrors that reflect the beam 90 degrees
-    // flat end of | or - -> two beams that move to where the ends of the splitters are pointing
-    // energized tile: at least one beam on top of it
+    let mut start_beams = vec![];
 
-    0
+    for row in 0..rows {
+        start_beams.push(Beam::new(
+            Vector {
+                d_row: row as isize,
+                d_col: -1,
+            },
+            RIGHT,
+        ));
+
+        start_beams.push(Beam::new(
+            Vector {
+                d_row: row as isize,
+                d_col: cols as isize,
+            },
+            LEFT,
+        ));
+    }
+
+    for col in 0..cols {
+        start_beams.push(Beam::new(
+            Vector {
+                d_row: -1,
+                d_col: col as isize,
+            },
+            DOWN,
+        ));
+
+        start_beams.push(Beam::new(
+            Vector {
+                d_row: rows as isize,
+                d_col: col as isize,
+            },
+            UP,
+        ));
+    }
+
+    start_beams
+        .iter()
+        .map(|b| count_tiles(*b, &contraption, rows, cols))
+        .max()
+        .unwrap()
 }
 
 #[test]
@@ -210,12 +248,12 @@ fn part1_puzzle() {
     assert_eq!(7210, part1(PART1_FILE));
 }
 
-// #[test]
-// fn part2_example() {
-//     assert_eq!(145, part2("test2.txt"));
-// }
+#[test]
+fn part2_example() {
+    assert_eq!(51, part2("test2.txt"));
+}
 
-// #[test]
-// fn part2_puzzle() {
-//     assert_eq!(295719, part2(PART2_FILE));
-// }
+#[test]
+fn part2_puzzle() {
+    assert_eq!(7673, part2(PART2_FILE));
+}
