@@ -1,8 +1,20 @@
-use core::panic;
-use std::{collections::BTreeSet, env};
+use std::{
+    collections::{btree_map::Entry, HashMap, HashSet},
+    env,
+};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
+const RIGHT: Vector = Vector { d_row: 0, d_col: 1 };
+const LEFT: Vector = Vector {
+    d_row: 0,
+    d_col: -1,
+};
+const UP: Vector = Vector {
+    d_row: -1,
+    d_col: 0,
+};
+const DOWN: Vector = Vector { d_row: 1, d_col: 0 };
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-17 p<n>";
@@ -10,7 +22,8 @@ fn main() {
         match part.as_str() {
             "p1" => {
                 println!("Reading `{PART1_FILE}`");
-                println!("Sum is {}", part1(PART1_FILE));
+                println!("Sum is {}", part1("test1.txt"));
+                // println!("Sum is {}", part1(PART1_FILE));
             }
             "p2" => {
                 println!("Reading `{PART2_FILE}`");
@@ -23,207 +36,229 @@ fn main() {
     }
 }
 
-// TODO: rewrite this using some type of path like on day 16
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Point {
-    row: usize,
-    col: usize,
+enum Turn {
+    Left,
+    Right,
 }
 
-impl Point {
-    fn new(row: usize, col: usize) -> Self {
-        Self { row, col }
-    }
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+struct Vector {
+    d_row: isize,
+    d_col: isize,
+}
 
-    fn left(&self) -> Option<Self> {
-        if let Some(prev_row) = self.row.checked_sub(1) {
-            Some(Self {
-                row: prev_row,
-                col: self.col,
-            })
-        } else {
-            None
+impl Vector {
+    fn turn(&self, new_dir: Turn) -> Self {
+        match new_dir {
+            Turn::Left => match *self {
+                LEFT => DOWN,
+                RIGHT => UP,
+                UP => LEFT,
+                DOWN => RIGHT,
+                _ => unreachable!("illegal vector value {:?}", self),
+            },
+            Turn::Right => match *self {
+                LEFT => UP,
+                RIGHT => DOWN,
+                UP => RIGHT,
+                DOWN => LEFT,
+                _ => unreachable!("illegal vector value {:?}", self),
+            },
         }
     }
+}
 
-    fn right(&self) -> Self {
+impl std::ops::Add for Vector {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
         Self {
-            row: self.row,
-            col: self.col + 1,
+            d_row: self.d_row + other.d_row,
+            d_col: self.d_col + other.d_col,
         }
     }
+}
 
-    fn above(&self) -> Option<Self> {
-        if let Some(prev_col) = self.col.checked_sub(1) {
-            Some(Self {
-                row: self.row,
-                col: prev_col,
-            })
-        } else {
-            None
-        }
-    }
+#[derive(Clone, PartialEq)]
+struct Path {
+    direction: Vector,
+    position: Vector,
+    visited_positions: Vec<Vector>,
+    has_cycle: bool,
+    straight_count: usize,
+    length: usize,
+}
 
-    fn below(&self) -> Self {
+impl Path {
+    fn new(start_pos: Vector, start_dir: Vector) -> Self {
         Self {
-            row: self.row + 1,
-            col: self.col,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, Hash)]
-struct Node {
-    point: Point,
-    heat_loss: usize,
-    dist: usize,
-    was_visited: bool,
-}
-
-impl PartialOrd for Node {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Node {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.dist.cmp(&other.dist)
-    }
-}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.dist == other.dist
-    }
-}
-
-impl Node {
-    fn new(c: char, row: usize, col: usize) -> Self {
-        Self {
-            point: Point::new(row, col),
-            heat_loss: c.to_digit(10).expect("this is not a number") as usize,
-            dist: usize::MAX,
-            was_visited: false,
+            direction: start_dir,
+            position: start_pos,
+            visited_positions: vec![start_pos],
+            has_cycle: false,
+            straight_count: 0,
+            length: 0,
         }
     }
 
-    fn neighbors(&self) -> Vec<Point> {
-        let mut vec = vec![self.point.right(), self.point.below()];
-
-        if let Some(left) = self.point.left() {
-            vec.push(left);
-        }
-
-        if let Some(above) = self.point.above() {
-            vec.push(above);
-        }
-
-        vec
-    }
-}
-
-struct Array {
-    ranking: BTreeSet<Node>,
-}
-
-impl Array {
-    fn new(file: &str) -> Self {
-        let mut data: BTreeSet<Node> = file
-            .split_ascii_whitespace()
-            .enumerate()
-            .flat_map(|(row, line)| {
-                line.chars()
-                    .enumerate()
-                    .map(|(col, c)| Node::new(c, row, col)).collect()
-            })
-            .collect();
-
-        let start = data.iter().find(|n| n.point == Point::new(0, 0));
-        data.get()
-        
-        let mut ranking = BTreeSet::new();
-        for e in data.iter().flatten() {
-            ranking.insert(*e);
-        }
-
-        Self { ranking }
+    fn advance(&mut self) {
+        let new_pos = self.position + self.direction;
+        self.has_cycle |= self.visited_positions.contains(&new_pos);
+        self.visited_positions.push(new_pos);
+        self.position = new_pos;
+        self.straight_count += 1;
     }
 
-    fn get_mut(&mut self, point: Point) -> &mut Node {
-        if let Some(row) = self.data.get_mut(point.row) {
-            row.get_mut(point.col).unwrap()
+    fn in_bounds(&self) -> bool {
+        self.position.d_row >= 0 && self.position.d_col >= 0
+    }
+
+    fn row(&self) -> usize {
+        self.position.d_row as usize
+    }
+
+    fn col(&self) -> usize {
+        self.position.d_col as usize
+    }
+
+    fn turn(&mut self, new_dir: Turn) {
+        self.direction = self.direction.turn(new_dir);
+        self.straight_count = 0;
+    }
+
+    fn split(&mut self) -> Vec<Self> {
+        let left = Self {
+            direction: self.direction.turn(Turn::Left),
+            position: self.position,
+            visited_positions: self.visited_positions.clone(),
+            has_cycle: self.has_cycle,
+            straight_count: 0,
+            length: self.length,
+        };
+
+        if self.straight_count == 2 {
+            self.turn(Turn::Right);
+            return vec![left];
         } else {
-            panic!();
+            let right = Self {
+                direction: self.direction.turn(Turn::Right),
+                position: self.position,
+                visited_positions: self.visited_positions.clone(),
+                has_cycle: self.has_cycle,
+                straight_count: 0,
+                length: self.length,
+            };
+            return vec![left, right];
         }
     }
+}
 
-    fn get(&self, point: Point) -> &Node {
-        if let Some(row) = self.data.get(point.row) {
-            row.get(point.col).unwrap()
-        } else {
-            panic!();
-        }
-    }
+fn find_hottest_path(first_path: Path, city_grid: &[Vec<u8>], rows: usize, cols: usize) -> usize {
+    let mut paths = vec![first_path];
+    let other_paths = paths[0].split();
+    paths.extend(other_paths);
 
-    fn get_neighbors(&self, point: Point) -> Vec<Point> {
-        self.get(point)
-            .neighbors()
-            .iter()
-            .filter_map(|n| {
-                if n.row < self.rows && n.col < self.cols {
-                    Some(*n)
-                } else {
-                    None
+    let mut best_points: HashMap<(usize, usize), Path> = HashMap::new();
+
+    let mut min_path_length = usize::MAX;
+    let mut count = 0;
+
+    while !paths.is_empty() {
+        println!("{:?}\n  {:?}", count, paths.len());
+
+        // advance beams
+        paths.iter_mut().for_each(|b| b.advance());
+
+        // filter out beams that are out of bounds
+        paths.retain(|b| b.in_bounds() && b.row() < rows && b.col() < cols && !b.has_cycle);
+
+        let mut new_beams = vec![];
+        // interact with environment
+        best_points.clear();
+        paths.iter_mut().for_each(|b| {
+            b.length += city_grid[b.row()][b.col()] as usize;
+
+            if let Some(entry) = best_points.get_mut(&(b.row(), b.col())) {
+                if b.length < entry.length {
+                    *entry = b.clone();
                 }
-            })
-            .collect()
+            } else {
+                best_points.insert((b.row(), b.col()), b.clone());
+            }
+        });
+
+        paths.retain(|b| best_points.values().any(|v| *v == *b));
+
+        // for r in 0..rows {
+        //     for c in 0..cols {
+        //         if best_points.contains_key(&(r, c)) {
+        //             print!("*");
+        //         } else {
+        //             print!("_");
+        //         }
+        //     }
+        //     println!();
+        // }
+
+        paths.iter_mut().for_each(|b| {
+            if b.row() == rows - 1 && b.col() == cols - 1 {
+                if b.length < min_path_length {
+                    // TODO: print min path to end for checking
+                }
+                min_path_length = min_path_length.min(b.length);
+
+                for r in 0..rows {
+                    for c in 0..cols {
+                        if best_points.contains_key(&(r, c)) {
+                            print!("*");
+                        } else {
+                            print!("_");
+                        }
+                    }
+                    println!();
+                }
+                path_lengths.push(b.length);
+            } else {
+                new_beams.extend(b.split());
+            }
+        });
+
+        if let Some(min) = path_lengths.iter().min() {
+            println!("  {min:?}");
+        }
+        // combine new beams with our list
+        paths.extend(new_beams);
+
+        // retain only the shortest path to each point with a path on it
+        count += 1;
     }
+
+    *path_lengths.iter().min().unwrap()
 }
 
 fn part1(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
+    let city_grid: Vec<Vec<u8>> = file
+        .split_ascii_whitespace()
+        .map(|line| {
+            line.chars()
+                .map(|c| c.to_digit(10).unwrap() as u8)
+                .collect()
+        })
+        .collect();
+    let (rows, cols) = (city_grid.len(), city_grid[0].len());
 
-    let mut a = Array::new(&file);
+    let first_beam = Path::new(Vector { d_row: 0, d_col: 0 }, RIGHT);
 
-    let start_point = Point::new(0, 0);
+    city_grid.iter().for_each(|l| {
+        l.iter().for_each(|n| print!("{n:?}"));
+        println!();
+    });
 
-    let mut current_point = start_point;
-
-    while !a.data[a.rows - 1][a.cols - 1].was_visited {
-        let current_dist = a.get(current_point).dist;
-        for neighbor in a.get_neighbors(current_point) {
-            if a.get(neighbor).was_visited {
-                continue;
-            }
-
-            let hl = a.get(neighbor).heat_loss;
-            let d = a.get(neighbor).dist;
-            a.get_mut(neighbor).dist = d.min(current_dist + hl);
-        }
-
-        a.get_mut(current_point).was_visited = true;
-        // find closest point in
-        // current_point =
-    }
-
-    // 1. run dijkstra's algorithm
-    // 2. go back and enforce our constraints, i.e. only 3 straights after another, only straight-ahead, left, or right
-
-    0
+    find_hottest_path(first_beam, &city_grid, rows, cols)
 }
 
 fn part2(filename: &str) -> usize {
-    let file = std::fs::read_to_string(filename).unwrap();
-    let map: Vec<Vec<_>> = file
-        .split_ascii_whitespace()
-        .map(|line| line.chars().map(|c| c.to_digit(10)).collect())
-        .collect();
-    let (rows, cols) = (map.len(), map[0].len());
-
-    println!("{rows:?} by {cols:?}");
-
     0
 }
 
