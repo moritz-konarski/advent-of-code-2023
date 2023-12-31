@@ -154,24 +154,17 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
         dc: cols as isize - 1,
     };
 
+    let mut min_path_length: Option<usize> = None;
     let mut paths = Vec::with_capacity(rows * cols / 2);
     let mut new_paths = Vec::with_capacity(rows * cols / 2);
     let mut best_paths_per_point: HashMap<_, (Path, Option<Path>)> =
         HashMap::with_capacity(rows * cols / 2);
-
-    let mut min_path_length: Option<usize> = None;
-    // // TODO: remove
-    // let mut last_min = usize::MAX;
 
     // first basic iteration
     paths.push(first_path.clone());
     paths.extend(first_path.split());
 
     while !paths.is_empty() {
-        // print!("{:?} -- {:?}", count, paths.len());
-
-        // advance beams
-        // paths.iter_mut().for_each(|b| b.advance());
         best_paths_per_point.clear();
 
         paths.retain_mut(|p| {
@@ -199,43 +192,16 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
             }
         });
 
-        // filter out beams that are out of bounds
-        // paths.retain(|b| );
-
-        // interact with environment
-        // best_paths_per_point.clear();
-
-        // paths.iter_mut().for_each(|b| {
-        // });
-
         new_paths.clear();
-
         paths.retain_mut(|p| {
-            if best_paths_per_point
-                .values()
-                .any(|v| v.0 == *p || (v.1.is_some() && v.1.as_ref().unwrap() == p))
-            {
+            let (first, second) = best_paths_per_point.get(&(p.row(), p.col())).unwrap();
+
+            if p == first || (second.is_some() && p == second.as_ref().unwrap()) {
                 if p.position == goal {
                     if let Some(min) = min_path_length {
                         min_path_length = Some(min.min(p.length));
                     } else {
                         min_path_length = Some(p.length);
-                    }
-
-                    println!();
-
-                    for r in 0..rows {
-                        for c in 0..cols {
-                            if p.visited_positions.contains(&Vector {
-                                dr: r as isize,
-                                dc: c as isize,
-                            }) {
-                                print!("x");
-                            } else {
-                                print!("_");
-                            }
-                        }
-                        println!();
                     }
 
                     false
@@ -248,19 +214,15 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
             }
         });
 
-        // paths.retain_mut(|p| {});
-
         // TODO: remove
-        println!("{:?}", min_path_length);
+        min_path_length
+            .is_some()
+            .then(|| println!("{:?}", min_path_length.unwrap()));
 
         // combine new beams with our list
         paths.extend_from_slice(&new_paths);
-
-        // retain only the shortest path to each point with a path on it
-        // count += 1;
     }
 
-    // *path_lengths.iter().min().unwrap()
     min_path_length.unwrap()
 }
 
