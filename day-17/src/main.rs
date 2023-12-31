@@ -9,6 +9,7 @@ const RIGHT: Vector = Vector { dr: 0, dc: 1 };
 const LEFT: Vector = Vector { dr: 0, dc: -1 };
 const UP: Vector = Vector { dr: -1, dc: 0 };
 const DOWN: Vector = Vector { dr: 1, dc: 0 };
+const PATHS_PER_POINT: usize = 5;
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-17 p<n>";
@@ -157,8 +158,7 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
     let mut min_path_length: Option<usize> = None;
     let mut paths = Vec::with_capacity(rows * cols / 2);
     let mut new_paths = Vec::with_capacity(rows * cols / 2);
-    let mut best_paths_per_point: HashMap<_, (Path, Option<Path>)> =
-        HashMap::with_capacity(rows * cols / 2);
+    let mut best_paths_per_point: HashMap<_, Vec<Path>> = HashMap::with_capacity(rows * cols / 2);
 
     // first basic iteration
     paths.push(first_path.clone());
@@ -176,14 +176,16 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
                 p.length += city_grid[p.row()][p.col()];
 
                 if let Some(entry) = best_paths_per_point.get_mut(&(p.row(), p.col())) {
-                    if p.length < entry.0.length {
-                        entry.1 = Some(entry.0.clone());
-                        entry.0 = p.clone();
-                    } else if entry.1.is_none() || p.length < entry.1.as_ref().unwrap().length {
-                        entry.1 = Some(p.clone());
+                    if let Some(pos) = entry.iter().position(|i| i.length > p.length) {
+                        entry.insert(pos, p.clone());
+                        if entry.len() >= PATHS_PER_POINT {
+                            entry.pop();
+                        }
+                    } else if entry.len() < PATHS_PER_POINT {
+                        entry.push(p.clone());
                     }
                 } else {
-                    best_paths_per_point.insert((p.row(), p.col()), (p.clone(), None));
+                    best_paths_per_point.insert((p.row(), p.col()), vec![p.clone()]);
                 }
 
                 true
@@ -194,9 +196,9 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
 
         new_paths.clear();
         paths.retain_mut(|p| {
-            let (first, second) = best_paths_per_point.get(&(p.row(), p.col())).unwrap();
+            let entry = best_paths_per_point.get(&(p.row(), p.col())).unwrap();
 
-            if p == first || (second.is_some() && p == second.as_ref().unwrap()) {
+            if entry.contains(p) {
                 if p.position == goal {
                     if let Some(min) = min_path_length {
                         min_path_length = Some(min.min(p.length));
@@ -223,7 +225,7 @@ fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
         paths.extend_from_slice(&new_paths);
     }
 
-    min_path_length.unwrap()
+    min_path_length.unwrap_or(0)
 }
 
 fn part1(filename: &str) -> usize {
