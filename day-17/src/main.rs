@@ -9,7 +9,7 @@ const RIGHT: Vector = Vector { dr: 0, dc: 1 };
 const LEFT: Vector = Vector { dr: 0, dc: -1 };
 const UP: Vector = Vector { dr: -1, dc: 0 };
 const DOWN: Vector = Vector { dr: 1, dc: 0 };
-const PATHS_PER_POINT: usize = 2;
+const PATHS_PER_POINT: usize = 100;
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-17 p<n>";
@@ -17,7 +17,8 @@ fn main() {
         match part.as_str() {
             "p1" => {
                 println!("Reading `{PART1_FILE}`");
-                println!("Sum is {}", part1(PART1_FILE));
+                println!("Sum is {}", part1("test1.txt"));
+                // println!("Sum is {}", part1(PART1_FILE));
             }
             "p2" => {
                 println!("Reading `{PART2_FILE}`");
@@ -183,34 +184,44 @@ fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
     let (r_goal, c_goal) = (rows - 1, cols - 1);
 
     // a grid with a vec of paths ordered by length for each cell
-    let mut path_grid = vec![vec![VecDeque::new(); cols]; rows];
+    // TODO: make a second grid into which the paths are written to avoid inconsistent
+    // step counts; this increases memory etc a bit, but it would work as intended
+    let mut path_grid = vec![vec![VecDeque::with_capacity(PATHS_PER_POINT); cols]; rows];
     // populate the starting position
     path_grid[0][0].push_front(first_path);
 
     // the minimum observed length of a path that reached the end
-    let mut min_path_length: Option<usize> = None;
+    let mut min_heat_loss = usize::MAX;
+    let mut last_min = 0;
+
+    let mut cull_count = 0;
+    let mut iter_count = 0;
+
+    let mut step_count = 1;
 
     // condition to check if every vec in the grid is empty
     let mut is_empty = false;
     while !is_empty {
         is_empty = true;
+        step_count += 1;
         // iterate over the whole grid
+        cull_count = 0;
+        iter_count = 0;
         for row in 0..rows {
             for col in 0..cols {
                 // process finished paths
                 if row == r_goal && col == c_goal {
-                    while let Some(finished_path) = path_grid[r_goal][c_goal].pop_front() {
-                        // dbg!(finished_path.heat_loss);
-                        if let Some(minimal_length) = min_path_length {
-                            min_path_length = Some(minimal_length.min(finished_path.heat_loss));
-                        } else {
-                            min_path_length = Some(finished_path.heat_loss);
+                    if let Some(best_path) = path_grid[r_goal][c_goal].pop_front() {
+                        is_empty = false;
+                        min_heat_loss = min_heat_loss.min(best_path.heat_loss);
+                        if last_min != min_heat_loss {
+                            last_min = min_heat_loss;
+                            dbg!(min_heat_loss);
+                            dbg!(cull_count);
+                            dbg!(iter_count);
                         }
+                        path_grid[r_goal][c_goal].clear();
                     }
-
-                    // min_path_length
-                    //     .is_some()
-                    //     .then(|| dbg!(min_path_length.unwrap(),));
                     continue;
                 }
 
@@ -224,6 +235,17 @@ fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
                         if !new_path.has_cycle && new_path.is_in_bounds(rows, cols) {
                             // get appropriate heat loss
                             new_path.heat_loss += block_heat_loss[new_row][new_col];
+
+                            // aggressively cull the number of paths that can never be optimal
+                            if new_path.heat_loss >= min_heat_loss {
+                                cull_count += 1;
+                                continue;
+                            } else {
+                                // dbg!(new_path.heat_loss);
+                                // dbg!(min_heat_loss);
+                                // dbg!(new_path.visited_positions.len());
+                                iter_count += 1;
+                            }
 
                             // get the current vec
                             let new_vec = &mut path_grid[new_row][new_col];
@@ -276,6 +298,13 @@ fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
                 }
             }
         }
+        println!(
+            "all {:?}? {:?}",
+            step_count,
+            path_grid.iter().all(|r| r
+                .iter()
+                .all(|v| v.iter().all(|p| p.visited_positions.len() == step_count)))
+        );
     }
 
     // while !paths.is_empty() {
@@ -339,12 +368,12 @@ fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
     // paths.par_extend(new_paths);
     // }
 
-    min_path_length.unwrap_or(0)
+    min_heat_loss
 }
 
 fn part1(filename: &str) -> usize {
     let file = std::fs::read_to_string(filename).unwrap();
-    let city_grid: Vec<Vec<usize>> = file
+    let heat_loss_grid: Vec<Vec<usize>> = file
         .split_ascii_whitespace()
         .map(|line| {
             line.chars()
@@ -360,7 +389,7 @@ fn part1(filename: &str) -> usize {
     //     println!();
     // });
 
-    find_hottest_path(first_path, &city_grid)
+    find_hottest_path(first_path, &heat_loss_grid)
 }
 
 fn part2(filename: &str) -> usize {
