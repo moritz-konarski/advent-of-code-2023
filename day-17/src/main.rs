@@ -1,6 +1,5 @@
-// use rayon::prelude::*;
 use std::{
-    collections::{BTreeSet, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     env,
 };
 
@@ -18,8 +17,7 @@ fn main() {
         match part.as_str() {
             "p1" => {
                 println!("Reading `{PART1_FILE}`");
-                println!("Sum is {}", part1("test1.txt"));
-                // println!("Sum is {}", part1(PART1_FILE));
+                println!("Sum is {}", part1(PART1_FILE));
             }
             "p2" => {
                 println!("Reading `{PART2_FILE}`");
@@ -82,12 +80,12 @@ struct Path {
     visited_positions: HashSet<Vector>,
     has_cycle: bool,
     straight_count: usize,
-    length: usize,
+    heat_loss: usize,
 }
 
 impl std::fmt::Debug for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Path {:?}", self.length)
+        write!(f, "Path {:?}", self.heat_loss)
     }
 }
 
@@ -99,13 +97,13 @@ impl PartialOrd for Path {
 
 impl Ord for Path {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.length.cmp(&other.length)
+        self.heat_loss.cmp(&other.heat_loss)
     }
 }
 
 impl PartialEq for Path {
     fn eq(&self, other: &Self) -> bool {
-        self.length == other.length
+        self.heat_loss == other.heat_loss
     }
 }
 
@@ -119,7 +117,7 @@ impl Path {
             visited_positions: HashSet::from([position]),
             has_cycle: false,
             straight_count: 0,
-            length: 0,
+            heat_loss: 0,
         }
     }
 
@@ -131,7 +129,7 @@ impl Path {
             visited_positions: self.visited_positions.clone(),
             has_cycle: self.has_cycle,
             straight_count: 0,
-            length: self.length,
+            heat_loss: self.heat_loss,
         }
     }
 
@@ -145,11 +143,11 @@ impl Path {
     }
 
     #[inline]
-    fn in_bounds(&self, row_max: isize, col_max: isize) -> bool {
+    fn is_in_bounds(&self, row_max: usize, col_max: usize) -> bool {
         self.position.dr >= 0
-            && self.position.dr < row_max
+            && self.position.dr < row_max as isize
             && self.position.dc >= 0
-            && self.position.dc < col_max
+            && self.position.dc < col_max as isize
     }
 
     #[inline]
@@ -163,101 +161,121 @@ impl Path {
     }
 
     #[inline]
-    fn turn(&mut self, new_dir: Turn) {
+    fn turn(mut self, new_dir: Turn) -> Self {
         self.direction = self.direction.turn(new_dir);
         self.straight_count = 0;
+        self
     }
 
     #[inline]
-    fn split(&mut self) -> Vec<Self> {
-        let left = self.copy(Turn::Left);
-
+    fn split(self) -> Vec<Self> {
         if self.straight_count == 3 {
-            self.turn(Turn::Right);
-            vec![left]
+            vec![self.copy(Turn::Left), self.turn(Turn::Right)]
         } else {
-            vec![left, self.copy(Turn::Right)]
+            vec![self.copy(Turn::Left), self.copy(Turn::Right), self]
         }
     }
 }
 
-fn find_hottest_path(mut first_path: Path, city_grid: &[Vec<usize>]) -> usize {
-    let (rows, cols) = (city_grid.len(), city_grid[0].len());
+fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize {
+    // some variables that crop up
+    let (rows, cols) = (block_heat_loss.len(), block_heat_loss[0].len());
     let (r_goal, c_goal) = (rows - 1, cols - 1);
 
+    // a grid with a vec of paths ordered by length for each cell
     let mut path_grid = vec![vec![VecDeque::new(); cols]; rows];
+    // populate the starting position
+    path_grid[0][0].push_front(first_path);
 
+    // the minimum observed length of a path that reached the end
     let mut min_path_length: Option<usize> = None;
 
-    path_grid[0][0].push_front(first_path.clone());
-    path_grid[0][0].extend(first_path.split());
-
+    // condition to check if every vec in the grid is empty
     let mut is_empty = false;
     while !is_empty {
         is_empty = true;
+        // iterate over the whole grid
         for row in 0..rows {
             for col in 0..cols {
-                // if row == r_goal && col == c_goal {
-                //     println!("{:?}", path_grid[row][col]);
-                //     // continue;
-                // }
-
-                while let Some(mut path) = path_grid[row][col].pop_front() {
-                    is_empty = false;
-
-                    let (new_row, new_col) = path.advance();
-
-                    if !path.has_cycle && path.in_bounds(rows as isize, cols as isize) {
-                        path.length += city_grid[new_row][new_col];
-
-                        for next_path in path.split() {
-                            if let Some(found_position) = path_grid[new_row][new_col]
-                                .iter()
-                                .position(|saved_path| next_path < *saved_path)
-                            {
-                                path_grid[new_row][new_col].insert(found_position, next_path);
-                                if path_grid[new_row][new_col].len() >= PATHS_PER_POINT {
-                                    path_grid[new_row][new_col].pop_back();
-                                }
-                            } else if path_grid[new_row][new_col].len() < PATHS_PER_POINT {
-                                path_grid[new_row][new_col].push_back(next_path);
-                            }
-                        }
-
-                        if let Some(pos) = path_grid[new_row][new_col]
-                            .iter()
-                            .position(|next_path| path < *next_path)
-                        {
-                            path_grid[new_row][new_col].insert(pos, path);
-                            if path_grid[new_row][new_col].len() >= PATHS_PER_POINT {
-                                path_grid[new_row][new_col].pop_back();
-                            }
-                        } else if path_grid[new_row][new_col].len() < PATHS_PER_POINT {
-                            path_grid[new_row][new_col].push_back(path);
+                // process finished paths
+                if row == r_goal && col == c_goal {
+                    while let Some(finished_path) = path_grid[r_goal][c_goal].pop_front() {
+                        // dbg!(finished_path.heat_loss);
+                        if let Some(minimal_length) = min_path_length {
+                            min_path_length = Some(minimal_length.min(finished_path.heat_loss));
+                        } else {
+                            min_path_length = Some(finished_path.heat_loss);
                         }
                     }
+
+                    // min_path_length
+                    //     .is_some()
+                    //     .then(|| dbg!(min_path_length.unwrap(),));
+                    continue;
+                }
+
+                // process other paths
+                while let Some(path) = path_grid[row][col].pop_front() {
+                    is_empty = false;
+
+                    for mut new_path in path.split() {
+                        let (new_row, new_col) = new_path.advance();
+
+                        if !new_path.has_cycle && new_path.is_in_bounds(rows, cols) {
+                            // get appropriate heat loss
+                            new_path.heat_loss += block_heat_loss[new_row][new_col];
+
+                            // get the current vec
+                            let new_vec = &mut path_grid[new_row][new_col];
+
+                            // see where our path fits in the new vec
+                            if let Some(rank_in_vec) = new_vec.iter().position(|p| new_path < *p) {
+                                // put it there
+                                new_vec.insert(rank_in_vec, new_path);
+
+                                // if the vec is too long, remove the worst path
+                                if new_vec.len() >= PATHS_PER_POINT {
+                                    new_vec.pop_back();
+                                }
+                            } else if new_vec.len() < PATHS_PER_POINT {
+                                // if there is no spot but there are not enough paths, we add this one
+                                new_vec.push_back(new_path);
+                            }
+                        }
+                    }
+
+                    // if !path.has_cycle && path.is_in_bounds(rows as isize, cols as isize) {
+                    //     path.heat_loss += block_heat_loss[new_row][new_col];
+
+                    //     for next_path in path.split() {
+                    //         if let Some(found_position) = path_grid[new_row][new_col]
+                    //             .iter()
+                    //             .position(|saved_path| next_path < *saved_path)
+                    //         {
+                    //             path_grid[new_row][new_col].insert(found_position, next_path);
+                    //             if path_grid[new_row][new_col].len() >= PATHS_PER_POINT {
+                    //                 path_grid[new_row][new_col].pop_back();
+                    //             }
+                    //         } else if path_grid[new_row][new_col].len() < PATHS_PER_POINT {
+                    //             path_grid[new_row][new_col].push_back(next_path);
+                    //         }
+                    //     }
+
+                    //     if let Some(pos) = path_grid[new_row][new_col]
+                    //         .iter()
+                    //         .position(|next_path| path < *next_path)
+                    //     {
+                    //         path_grid[new_row][new_col].insert(pos, path);
+                    //         if path_grid[new_row][new_col].len() >= PATHS_PER_POINT {
+                    //             path_grid[new_row][new_col].pop_back();
+                    //         }
+                    //     } else if path_grid[new_row][new_col].len() < PATHS_PER_POINT {
+                    //         path_grid[new_row][new_col].push_back(path);
+                    //     }
+                    // }
                 }
             }
         }
-
-        while let Some(finished_path) = path_grid
-            .last_mut()
-            .unwrap()
-            .last_mut()
-            .unwrap()
-            .pop_front()
-        {
-            println!("finishers {:?}", finished_path.length);
-            if let Some(minimal_length) = min_path_length {
-                min_path_length = Some(minimal_length.min(finished_path.length));
-            } else {
-                min_path_length = Some(finished_path.length);
-            }
-        }
-
-        min_path_length
-            .is_some()
-            .then(|| println!("{:?}", min_path_length.unwrap(),));
     }
 
     // while !paths.is_empty() {
