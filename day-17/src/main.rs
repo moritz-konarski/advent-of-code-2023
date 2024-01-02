@@ -1,14 +1,14 @@
-use std::env;
-
-// NOTE: 1272 is not the answer
+use std::{
+    collections::{BTreeMap, HashSet},
+    env,
+};
 
 const PART1_FILE: &str = "part1.txt";
 const PART2_FILE: &str = "part2.txt";
-const RIGHT: Vector = Vector { dr: 0, dc: 1 };
-const LEFT: Vector = Vector { dr: 0, dc: -1 };
-const UP: Vector = Vector { dr: -1, dc: 0 };
-const DOWN: Vector = Vector { dr: 1, dc: 0 };
-const PATHS_PER_POINT: usize = 300;
+const RIGHT: Vector = Vector { row: 0, col: 1 };
+const LEFT: Vector = Vector { row: 0, col: -1 };
+const UP: Vector = Vector { row: -1, col: 0 };
+const DOWN: Vector = Vector { row: 1, col: 0 };
 
 fn main() {
     let usage = "Incorrect arguements!\nUsage: day-17 p<n>";
@@ -29,46 +29,35 @@ fn main() {
     }
 }
 
-enum Turn {
+enum Direction {
     Left,
     Right,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Vector {
-    dr: isize,
-    dc: isize,
+    row: isize,
+    col: isize,
 }
 
 impl Vector {
-    fn turn(&self, new_dir: Turn) -> Self {
-        match new_dir {
-            Turn::Left => match *self {
-                LEFT => DOWN,
-                RIGHT => UP,
-                UP => LEFT,
-                DOWN => RIGHT,
-                _ => unreachable!("illegal vector value {:?}", self),
-            },
-            Turn::Right => match *self {
-                LEFT => UP,
-                RIGHT => DOWN,
-                UP => RIGHT,
-                DOWN => LEFT,
-                _ => unreachable!("illegal vector value {:?}", self),
-            },
+    fn change_direction(&mut self, new_direction: Direction) {
+        *self = match (new_direction, *self) {
+            (Direction::Left, LEFT) => DOWN,
+            (Direction::Left, RIGHT) => UP,
+            (Direction::Left, UP) => LEFT,
+            (Direction::Left, DOWN) => RIGHT,
+            (Direction::Right, LEFT) => UP,
+            (Direction::Right, RIGHT) => DOWN,
+            (Direction::Right, UP) => RIGHT,
+            (Direction::Right, DOWN) => LEFT,
+            _ => *self, // it's not a unit vector, so we ignore it
         }
     }
-}
 
-impl std::ops::Add for Vector {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        Self {
-            dr: self.dr + other.dr,
-            dc: self.dc + other.dc,
-        }
+    fn add(&mut self, other: &Self) {
+        self.row += other.row;
+        self.col += other.col;
     }
 }
 
@@ -78,6 +67,14 @@ struct Path {
     position: Vector,
     straight_count: usize,
     heat_loss: usize,
+}
+
+impl std::hash::Hash for Path {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.direction.hash(state);
+        self.position.hash(state);
+        self.straight_count.hash(state);
+    }
 }
 
 impl std::fmt::Debug for Path {
@@ -116,188 +113,112 @@ impl Path {
         }
     }
 
-    #[inline]
-    fn copy(&self, turn: Turn) -> Self {
-        Self {
-            direction: self.direction.turn(turn),
-            position: self.position,
-            straight_count: 0,
-            heat_loss: self.heat_loss,
+    fn copy_and_turn(&self, direction: Direction) -> Self {
+        let new_path = self.clone();
+        new_path.turn(direction)
+    }
+
+    fn take_step(&mut self) {
+        self.position.add(&self.direction);
+        self.straight_count += 1;
+    }
+
+    fn get_pos(&self) -> Option<(usize, usize)> {
+        if self.position.row >= 0 && self.position.col >= 0 {
+            Some((self.position.row as usize, self.position.col as usize))
+        } else {
+            None
         }
     }
 
-    fn advance(&mut self) -> (usize, usize) {
-        let new_pos = self.position + self.direction;
-        self.position = new_pos;
-        self.straight_count += 1;
-
-        (self.row(), self.col())
-    }
-
-    #[inline]
-    fn is_in_bounds(&self, row_max: usize, col_max: usize) -> bool {
-        self.position.dr >= 0
-            && self.position.dr < row_max as isize
-            && self.position.dc >= 0
-            && self.position.dc < col_max as isize
-    }
-
-    #[inline]
-    fn row(&self) -> usize {
-        self.position.dr as usize
-    }
-
-    #[inline]
-    fn col(&self) -> usize {
-        self.position.dc as usize
-    }
-
-    #[inline]
-    fn turn(mut self, new_dir: Turn) -> Self {
-        self.direction = self.direction.turn(new_dir);
+    fn turn(mut self, direction: Direction) -> Self {
+        self.direction.change_direction(direction);
         self.straight_count = 0;
         self
     }
 
-    #[inline]
     fn split(self) -> Vec<Self> {
         if self.straight_count == 3 {
-            vec![self.copy(Turn::Left), self.turn(Turn::Right)]
+            vec![
+                self.copy_and_turn(Direction::Left),
+                self.turn(Direction::Right),
+            ]
         } else {
-            vec![self.copy(Turn::Left), self.copy(Turn::Right), self]
+            vec![
+                self.copy_and_turn(Direction::Left),
+                self.copy_and_turn(Direction::Right),
+                self,
+            ]
         }
     }
 }
 
-fn find_hottest_path(first_path: Path, block_heat_loss: &[Vec<usize>]) -> usize {
-    // some variables that crop up
+struct PathMap {
+    map: BTreeMap<usize, Vec<Path>>,
+}
+
+impl PathMap {
+    fn new(start_path: Path) -> Self {
+        Self {
+            map: BTreeMap::from([(start_path.heat_loss, vec![start_path])]),
+        }
+    }
+
+    fn insert(&mut self, path: Path) {
+        self.map.entry(path.heat_loss).or_default().push(path);
+    }
+
+    fn pop(&mut self) -> Option<Path> {
+        if let Some(mut entry) = self.map.first_entry() {
+            if let Some(path) = entry.get_mut().pop() {
+                if entry.get().is_empty() {
+                    entry.remove_entry();
+                }
+                Some(path)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+
+fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize {
     let (rows, cols) = (block_heat_loss.len(), block_heat_loss[0].len());
-    let (r_goal, c_goal) = (rows - 1, cols - 1);
+    let goal = Vector {
+        row: rows as isize - 1,
+        col: cols as isize - 1,
+    };
 
-    let mut read_grid = vec![vec![vec![]; cols]; rows];
-    let mut write_grid = vec![vec![vec![]; cols]; rows];
-    // populate the starting position
-    read_grid[0][0].push(first_path);
+    let mut seen_paths = HashSet::new();
+    let mut paths = PathMap::new(start_path);
 
-    // the minimum observed length of a path that reached the end
-    let mut min_heat_loss = usize::MAX;
-    let mut last_min = 0;
+    while let Some(path) = paths.pop() {
+        if path.position == goal {
+            return path.heat_loss;
+        }
 
-    let mut cull_count = 0;
-    let mut iter_count = 0;
+        if !seen_paths.insert(path.clone()) {
+            continue;
+        }
 
-    let mut step_count = 1;
-    let mut is_empty = true;
+        for mut new_path in path.split() {
+            new_path.take_step();
 
-    for _ in 0..(rows * cols) {
-        is_empty = true;
-        step_count += 1;
-        // iterate over the whole grid
-        cull_count = 0;
-        iter_count = 0;
-        for row in 0..rows {
-            for col in 0..cols {
-                // process finished paths
-                if row == r_goal && col == c_goal {
-                    // read_grid[r_goal][c_goal].iter_mut().min_by(|p| )
-                    while let Some(best_path) = read_grid[r_goal][c_goal].pop() {
-                        is_empty = false;
-                        min_heat_loss = min_heat_loss.min(best_path.heat_loss);
-                        if last_min != min_heat_loss {
-                            last_min = min_heat_loss;
-                            dbg!(min_heat_loss);
-                            dbg!(cull_count);
-                            dbg!(iter_count);
-                        }
-                    }
+            if let Some((row, col)) = new_path.get_pos() {
+                if row >= rows || col >= cols {
                     continue;
                 }
 
-                // process other paths
-                while let Some(path) = read_grid[row][col].pop() {
-                    is_empty = false;
-                    for mut new_path in path.split() {
-                        let (new_row, new_col) = new_path.advance();
+                new_path.heat_loss += block_heat_loss[row][col];
 
-                        if new_path.is_in_bounds(rows, cols) {
-                            // if !new_path.has_cycle && new_path.is_in_bounds(rows, cols) {
-                            // get appropriate heat loss
-                            new_path.heat_loss += block_heat_loss[new_row][new_col];
-
-                            // aggressively cull the number of paths that can never be optimal
-                            if new_path.heat_loss >= min_heat_loss {
-                                cull_count += 1;
-                                // dbg!(cull_count);
-                                // dbg!(iter_count);
-                                continue;
-                            } else {
-                                // dbg!(new_path.heat_loss);
-                                // dbg!(min_heat_loss);
-                                // dbg!(new_path.visited_positions.len());
-                                iter_count += 1;
-                            }
-
-                            // write_grid[new_row][new_col].push(new_path);
-                            // // write_grid[new_row][new_col].sort_unstable();
-
-                            // see where our path fits in the new vec
-                            let pos = write_grid[new_row][new_col]
-                                .iter()
-                                .position(|p| new_path < *p)
-                                .unwrap_or(write_grid[new_row][new_col].len());
-                            write_grid[new_row][new_col].insert(pos, new_path);
-
-                            if write_grid[new_row][new_col].len() >= PATHS_PER_POINT {
-                                write_grid[new_row][new_col].pop();
-                            }
-
-                            //     // if the vec is too long, remove the worst path
-                            //     if write_grid[new_row][new_col].len() >= PATHS_PER_POINT {
-                            //         write_grid[new_row][new_col].pop_back();
-                            //     }
-                            // }
-                            // } else if new_vec.len() < PATHS_PER_POINT {
-                            //     // if there is no spot but there are not enough paths, we add this one
-                        }
-                    }
-                }
+                paths.insert(new_path);
             }
         }
-
-        // println!(
-        //     "all {:?}? {:?}",
-        //     step_count,
-        //     write_grid.iter().all(|r| r
-        //         .iter()
-        //         .all(|v| v.iter().all(|p| p.visited_positions.len() == step_count)))
-        // );
-
-        if is_empty {
-            break;
-        }
-
-        read_grid = write_grid.to_owned();
-        write_grid
-            .iter_mut()
-            .for_each(|row| row.iter_mut().for_each(|col| col.clear()));
-        // write_grid
-        //     .par_iter_mut()
-        //     .for_each(|row| row.iter_mut().for_each(|col| *col = VecDeque::new()));
-
-        // read_grid.par_iter_mut().enumerate().for_each(|(r, row)| {
-        //     row.iter_mut()
-        //         .enumerate()
-        //         .for_each(|(c, col)| *col = write_grid[r][c].clone());
-        // });
-        // for row in 0..rows {
-        //     (0..cols).into_par_iter().for_each(|col| {
-        //         read_grid[row][col] = write_grid[row][col].clone();
-        //     });
-        // }
-        // write_grid = vec![vec![vec![]; cols]; rows];
     }
 
-    min_heat_loss
+    unreachable!("there is always a path");
 }
 
 fn part1(filename: &str) -> usize {
@@ -311,9 +232,10 @@ fn part1(filename: &str) -> usize {
         })
         .collect();
 
-    let first_path = Path::new(RIGHT, Vector { dr: 0, dc: 0 });
+    let start = Vector { row: 0, col: 0 };
+    let start_path = Path::new(RIGHT, start);
 
-    find_hottest_path(first_path, &heat_loss_grid)
+    find_hottest_path(start_path, &heat_loss_grid)
 }
 
 fn part2(filename: &str) -> usize {
