@@ -36,8 +36,8 @@ enum Direction {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Vector {
-    row: isize,
-    col: isize,
+    row: i16,
+    col: i16,
 }
 
 impl Vector {
@@ -65,8 +65,10 @@ impl Vector {
 struct Path {
     direction: Vector,
     position: Vector,
-    straight_count: usize,
-    heat_loss: usize,
+    straight_count: u16,
+    heat_loss: u16,
+    straight_min: u16,
+    straight_max: u16,
 }
 
 impl std::hash::Hash for Path {
@@ -104,12 +106,14 @@ impl PartialEq for Path {
 impl Eq for Path {}
 
 impl Path {
-    fn new(direction: Vector, position: Vector) -> Self {
+    fn new(direction: Vector, position: Vector, straight_min: u16, straight_max: u16) -> Self {
         Self {
             direction,
             position,
             straight_count: 0,
             heat_loss: 0,
+            straight_min,
+            straight_max,
         }
     }
 
@@ -138,7 +142,7 @@ impl Path {
     }
 
     fn split(self) -> Vec<Self> {
-        if self.straight_count == 3 {
+        if self.straight_count == self.straight_max {
             vec![
                 self.copy_and_turn(Direction::Left),
                 self.turn(Direction::Right),
@@ -154,7 +158,7 @@ impl Path {
 }
 
 struct PathMap {
-    map: BTreeMap<usize, Vec<Path>>,
+    map: BTreeMap<u16, Vec<Path>>,
 }
 
 impl PathMap {
@@ -187,15 +191,14 @@ impl PathMap {
     }
 }
 
-fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize {
+fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<u16>]) -> u16 {
     let (rows, cols) = (block_heat_loss.len(), block_heat_loss[0].len());
     let goal = Vector {
-        row: rows as isize - 1,
-        col: cols as isize - 1,
+        row: rows as i16 - 1,
+        col: cols as i16 - 1,
     };
 
     let mut seen_paths = HashSet::with_capacity(rows * cols);
-    let mut seen_lengths = HashSet::with_capacity(1_000);
     let mut paths = PathMap::new(start_path);
 
     while let Some(path) = paths.pop() {
@@ -207,13 +210,19 @@ fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
             continue;
         }
 
-        if seen_lengths.insert(path.heat_loss) {
-            println!("{:?}", path.heat_loss);
-        }
-
         for mut new_path in path.split() {
-            new_path.take_step();
+            while new_path.straight_count < new_path.straight_min.saturating_sub(1) {
+                new_path.take_step();
+                if let Some((row, col)) = new_path.get_pos() {
+                    if row >= rows || col >= cols {
+                        break;
+                    }
 
+                    new_path.heat_loss += block_heat_loss[row][col];
+                }
+            }
+
+            new_path.take_step();
             if let Some((row, col)) = new_path.get_pos() {
                 if row >= rows || col >= cols {
                     continue;
@@ -229,25 +238,38 @@ fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
     unreachable!("there is always a path");
 }
 
-fn part1(filename: &str) -> usize {
+fn part1(filename: &str) -> u16 {
     let file = std::fs::read_to_string(filename).unwrap();
-    let heat_loss_grid: Vec<Vec<usize>> = file
+    let heat_loss_grid: Vec<Vec<u16>> = file
         .split_ascii_whitespace()
         .map(|line| {
             line.chars()
-                .map(|c| c.to_digit(10).unwrap() as usize)
+                .map(|c| c.to_digit(10).unwrap() as u16)
                 .collect()
         })
         .collect();
 
     let start = Vector { row: 0, col: 0 };
-    let start_path = Path::new(RIGHT, start);
+    let start_path = Path::new(RIGHT, start, 0, 3);
 
     find_hottest_path(start_path, &heat_loss_grid)
 }
 
-fn part2(filename: &str) -> usize {
-    0
+fn part2(filename: &str) -> u16 {
+    let file = std::fs::read_to_string(filename).unwrap();
+    let heat_loss_grid: Vec<Vec<u16>> = file
+        .split_ascii_whitespace()
+        .map(|line| {
+            line.chars()
+                .map(|c| c.to_digit(10).unwrap() as u16)
+                .collect()
+        })
+        .collect();
+
+    let start = Vector { row: 0, col: 0 };
+    let start_path = Path::new(RIGHT, start, 4, 10);
+
+    find_hottest_path(start_path, &heat_loss_grid)
 }
 
 #[test]
@@ -255,15 +277,15 @@ fn part1_example() {
     assert_eq!(102, part1("test1.txt"));
 }
 
-#[test]
-fn part1_puzzle() {
-    assert_eq!(1260, part1(PART1_FILE));
-}
-
 // #[test]
-// fn part2_example() {
-//     assert_eq!(51, part2("test2.txt"));
+// fn part1_puzzle() {
+//     assert_eq!(1260, part1(PART1_FILE));
 // }
+
+#[test]
+fn part2_example() {
+    assert_eq!(94, part2("test2.txt"));
+}
 
 // #[test]
 // fn part2_puzzle() {
