@@ -165,7 +165,10 @@ impl PathMap {
     }
 
     fn insert(&mut self, path: Path) {
-        self.map.entry(path.heat_loss).or_default().push(path);
+        self.map
+            .entry(path.heat_loss)
+            .or_insert(Vec::with_capacity(1_000))
+            .push(path);
     }
 
     fn pop(&mut self) -> Option<Path> {
@@ -191,7 +194,8 @@ fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
         col: cols as isize - 1,
     };
 
-    let mut seen_paths = HashSet::new();
+    let mut seen_paths = HashSet::with_capacity(rows * cols);
+    let mut seen_lengths = HashSet::with_capacity(1_000);
     let mut paths = PathMap::new(start_path);
 
     while let Some(path) = paths.pop() {
@@ -201,6 +205,10 @@ fn find_hottest_path(start_path: Path, block_heat_loss: &[Vec<usize>]) -> usize 
 
         if !seen_paths.insert(path.clone()) {
             continue;
+        }
+
+        if seen_lengths.insert(path.heat_loss) {
+            println!("{:?}", path.heat_loss);
         }
 
         for mut new_path in path.split() {
@@ -247,10 +255,10 @@ fn part1_example() {
     assert_eq!(102, part1("test1.txt"));
 }
 
-// #[test]
-// fn part1_puzzle() {
-//     assert_eq!(7210, part1(PART1_FILE));
-// }
+#[test]
+fn part1_puzzle() {
+    assert_eq!(1260, part1(PART1_FILE));
+}
 
 // #[test]
 // fn part2_example() {
