@@ -7,8 +7,8 @@ const LEFT: &str = "L";
 const RIGHT: &str = "R";
 
 fn main() {
-    let run_type = env::args().nth(1).expect("{USAGE}");
-    let number = env::args().nth(2).expect("{USAGE}");
+    let run_type = env::args().nth(1).expect(USAGE);
+    let number = env::args().nth(2).expect(USAGE);
     let result = match (run_type.as_str(), number.as_str()) {
         ("t", "1") => part1("test1.txt"),
         ("p", "1") => part1("part1.txt"),
@@ -56,6 +56,7 @@ fn parse_corners(commands: &[(&str, isize)]) -> Vec<(usize, usize)> {
 enum Earth {
     Normal,
     Trench,
+    Hole,
     AnyCorner,
     TLCorner,
     TRCorner,
@@ -120,19 +121,33 @@ fn dig_trench(corners: &[(usize, usize)]) -> Vec<Vec<Earth>> {
         });
     }
 
-    // TODO: parse corner type in index-based loop
+    // parse the corner type
+    for row in 0..row_max {
+        for col in 0..col_max {
+            if map[row][col] == AnyCorner {
+                let mut is_up = false;
+                if let Some(above_row) = map.get(row.saturating_sub(1)) {
+                    if above_row[col] == Trench {
+                        is_up = true;
+                    }
+                }
 
-    map.iter_mut().for_each(|row| {
-        let mut status = Outside;
-        row.iter_mut().for_each(|e| {
-            match (status, *e) {
-                (Outside, AnyCorner) => status = Inside,
-                (Inside, AnyCorner) => status = Outside,
-                (Inside, Normal) => *e = Trench,
-                _ => { /* no change */ }
+                let mut is_left = false;
+                if let Some(left_col) = map[row].get(col.saturating_sub(1)) {
+                    if *left_col == Trench {
+                        is_left = true;
+                    }
+                }
+
+                map[row][col] = match (is_up, is_left) {
+                    (true, true) => BRCorner,
+                    (true, false) => BLCorner,
+                    (false, true) => TRCorner,
+                    (false, false) => TLCorner,
+                };
             }
-        });
-    });
+        }
+    }
 
     map
 }
@@ -177,6 +192,7 @@ fn dig_interior(trench: &[Vec<Earth>]) -> Vec<Vec<Earth>> {
                     Trench => '#',
                     AnyCorner => 'x',
                     Normal => '.',
+                    _ => ' ',
                 }
             )
         });
