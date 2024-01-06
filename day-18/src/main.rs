@@ -1,59 +1,50 @@
 use std::env;
 
-const PART1_FILE: &str = "part1.txt";
-const PART2_FILE: &str = "part2.txt";
+const USAGE: &str = "Incorrect usage!\nUsage: cargo r -- [t|p] [1|2]";
 const UP: &str = "U";
 const DOWN: &str = "D";
 const LEFT: &str = "L";
 const RIGHT: &str = "R";
 
 fn main() {
-    let usage = "Incorrect arguements!\nUsage: day-18 p<n>";
-    if let Some(part) = env::args().nth(1) {
-        match part.as_str() {
-            "t1" => {
-                println!("Reading `test1.txt`");
-                println!("Sum is {}", part1("test1.txt"));
-            }
-            "p1" => {
-                println!("Reading `{PART1_FILE}`");
-                println!("Sum is {}", part1(PART1_FILE));
-            }
-            "t2" => {
-                println!("Reading `test2.txt`");
-                println!("Sum is {}", part1("test2.txt"));
-            }
-            "p2" => {
-                println!("Reading `{PART2_FILE}`");
-                println!("Sum is {}", part2(PART2_FILE));
-            }
-            _ => eprintln!("{usage}"),
-        }
-    } else {
-        eprintln!("{usage}");
-    }
+    let run_type = env::args().nth(1).expect("{USAGE}");
+    let number = env::args().nth(2).expect("{USAGE}");
+    let result = match (run_type.as_str(), number.as_str()) {
+        ("t", "1") => part1("test1.txt"),
+        ("p", "1") => part1("part1.txt"),
+        ("t", "2") => part2("test2.txt"),
+        ("p", "2") => part2("part2.txt"),
+        _ => panic!("{USAGE}"),
+    };
+    println!("Result for {run_type}{number} is {result:?}");
 }
 
 fn parse_corners(commands: &[(&str, isize)]) -> Vec<(usize, usize)> {
     let mut position = (0_isize, 0_isize);
-
     let mut corners = vec![position];
-    for command in commands {
-        let (direction, distance) = command;
 
-        match *direction {
-            LEFT => position.1 -= distance,
-            RIGHT => position.1 += distance,
-            UP => position.0 -= distance,
-            DOWN => position.0 += distance,
-            _ => unreachable!("illegal direction {direction}"),
+    for command in commands {
+        match command {
+            (LEFT, distance) => position.1 -= distance,
+            (RIGHT, distance) => position.1 += distance,
+            (UP, distance) => position.0 -= distance,
+            (DOWN, distance) => position.0 += distance,
+            _ => unreachable!("illegal command {command:?}"),
         }
 
         corners.push(position);
     }
 
-    let row_min = corners.iter().min_by_key(|e| e.0).unwrap().0;
-    let col_min = corners.iter().min_by_key(|e| e.1).unwrap().1;
+    let row_min = corners
+        .iter()
+        .min_by_key(|e| e.0)
+        .expect("there should be at least one corner")
+        .0;
+    let col_min = corners
+        .iter()
+        .min_by_key(|e| e.1)
+        .expect("there should be at least one corner")
+        .1;
 
     corners
         .iter()
@@ -64,12 +55,12 @@ fn parse_corners(commands: &[(&str, isize)]) -> Vec<(usize, usize)> {
 #[derive(Clone, Copy, PartialEq)]
 enum Earth {
     Normal,
-    Hole,
+    Trench,
     AnyCorner,
-    LUCorner,
-    RUCorner,
-    LDCorner,
-    RDCorner,
+    TLCorner,
+    TRCorner,
+    BLCorner,
+    BRCorner,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -85,8 +76,18 @@ fn dig_trench(corners: &[(usize, usize)]) -> Vec<Vec<Earth>> {
     use Earth::*;
     use LagoonState::*;
 
-    let row_max = corners.iter().max_by_key(|e| e.0).unwrap().0 + 1;
-    let col_max = corners.iter().max_by_key(|e| e.1).unwrap().1 + 1;
+    let row_max = corners
+        .iter()
+        .max_by_key(|e| e.0)
+        .expect("there should be at least one corner")
+        .0
+        + 1;
+    let col_max = corners
+        .iter()
+        .max_by_key(|e| e.1)
+        .expect("there should be at least one corner")
+        .1
+        + 1;
 
     let mut map = vec![vec![Normal; col_max]; row_max];
     for (row, col) in corners {
@@ -100,7 +101,7 @@ fn dig_trench(corners: &[(usize, usize)]) -> Vec<Vec<Earth>> {
             match (status, *e) {
                 (Outside, AnyCorner) => status = Inside,
                 (Inside, AnyCorner) => status = Outside,
-                (Inside, Normal) => *e = Hole,
+                (Inside, Normal) => *e = Trench,
                 _ => { /* no change */ }
             }
         });
@@ -113,7 +114,7 @@ fn dig_trench(corners: &[(usize, usize)]) -> Vec<Vec<Earth>> {
             match (status, row[col]) {
                 (Outside, AnyCorner) => status = Inside,
                 (Inside, AnyCorner) => status = Outside,
-                (Inside, Normal) => row[col] = Hole,
+                (Inside, Normal) => row[col] = Trench,
                 _ => { /* no change */ }
             }
         });
@@ -127,7 +128,7 @@ fn dig_trench(corners: &[(usize, usize)]) -> Vec<Vec<Earth>> {
             match (status, *e) {
                 (Outside, AnyCorner) => status = Inside,
                 (Inside, AnyCorner) => status = Outside,
-                (Inside, Normal) => *e = Hole,
+                (Inside, Normal) => *e = Trench,
                 _ => { /* no change */ }
             }
         });
@@ -148,19 +149,19 @@ fn dig_interior(trench: &[Vec<Earth>]) -> Vec<Vec<Earth>> {
 
         for e in row.iter_mut() {
             match (status, *e) {
-                (Outside, Hole) | (Outside, AnyCorner) => status = FirstTrench,
+                (Outside, Trench) | (Outside, AnyCorner) => status = FirstTrench,
                 (FirstTrench, Normal) => {
                     crossed_trenches += 1;
                     status = Inside;
-                    *e = Hole;
+                    *e = Trench;
                 }
                 (FirstTrench, AnyCorner) => {
                     crossed_trenches += 1;
                     status = Inside;
-                    *e = Hole;
+                    *e = Trench;
                 }
-                (Inside, Hole) => status = SecondTrench,
-                (Inside, Normal) => *e = Hole,
+                (Inside, Trench) => status = SecondTrench,
+                (Inside, Normal) => *e = Trench,
                 (SecondTrench, Normal) => status = Outside,
                 _ => { /* we can ignore these */ }
             }
@@ -173,7 +174,7 @@ fn dig_interior(trench: &[Vec<Earth>]) -> Vec<Vec<Earth>> {
             print!(
                 "{}",
                 match *e {
-                    Hole => '#',
+                    Trench => '#',
                     AnyCorner => 'x',
                     Normal => '.',
                 }
@@ -202,7 +203,7 @@ fn part1(filename: &str) -> usize {
 
     lagoon
         .iter()
-        .map(|row| row.iter().filter(|e| **e == Earth::Hole).count())
+        .map(|row| row.iter().filter(|e| **e == Earth::Trench).count())
         .sum()
 }
 
