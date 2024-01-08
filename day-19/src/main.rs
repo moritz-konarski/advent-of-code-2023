@@ -23,14 +23,14 @@ type Rule = Box<dyn Fn(&Part) -> Option<WorkflowTag>>;
 
 fn create_rule(field: &str, operation: &str, number: usize, tag: WorkflowTag) -> Rule {
     match (field, operation) {
-        ("x", "<") => Box::new(|p| (p.x < number).then_some(tag)),
-        ("x", ">") => Box::new(|p| (p.x > number).then_some(tag)),
-        ("m", "<") => Box::new(|p| (p.m < number).then_some(tag)),
-        ("m", ">") => Box::new(|p| (p.m > number).then_some(tag)),
-        ("a", "<") => Box::new(|p| (p.a < number).then_some(tag)),
-        ("a", ">") => Box::new(|p| (p.a > number).then_some(tag)),
-        ("s", "<") => Box::new(|p| (p.s < number).then_some(tag)),
-        ("s", ">") => Box::new(|p| (p.s > number).then_some(tag)),
+        ("x", "<") => Box::new(move |p| (p.x < number).then_some(tag.clone())),
+        ("x", ">") => Box::new(move |p| (p.x > number).then_some(tag.clone())),
+        ("m", "<") => Box::new(move |p| (p.m < number).then_some(tag.clone())),
+        ("m", ">") => Box::new(move |p| (p.m > number).then_some(tag.clone())),
+        ("a", "<") => Box::new(move |p| (p.a < number).then_some(tag.clone())),
+        ("a", ">") => Box::new(move |p| (p.a > number).then_some(tag.clone())),
+        ("s", "<") => Box::new(move |p| (p.s < number).then_some(tag.clone())),
+        ("s", ">") => Box::new(move |p| (p.s > number).then_some(tag.clone())),
         _ => unreachable!("illegal {field} and {operation}"),
     }
 }
@@ -53,20 +53,27 @@ struct Workflow {
 
 impl Workflow {
     fn new(desription: &&str) -> Self {
-        let (tag, rules) = desription.split_once('{').expect("should find {");
-        let rules = rules[1..rules.len() - 1]
+        let (tag, rules_str) = desription.split_once('{').expect("should find {");
+        let mut rules = rules_str[..rules_str.len() - 1]
             .split(',')
             .rev()
             .skip(1)
             .map(|rule| {
+                println!("{rule}");
                 let (rule, tag) = rule.split_once(':').expect(": not found");
                 let field = &rule[0..1];
                 let operation = &rule[1..2];
                 let number = rule[2..].parse().unwrap();
 
+                println!("{field} {operation} {number}\n");
+
                 create_rule(field, operation, number, tag.to_string())
             })
-            .collect();
+            .collect::<Vec<_>>();
+
+        let last_tag = rules_str[..rules_str.len() - 1].rsplit_once(',').unwrap().1;
+
+        rules.push(Box::new(move |_| Some(last_tag.to_owned())));
 
         Self {
             tag: tag.to_string(),
@@ -94,19 +101,23 @@ struct System {
 }
 
 impl System {
-    fn new(workflows: Vec<Workflow>) -> Self {
+    fn new(workflows: &[&str]) -> Self {
         Self {
-            workflows: workflows.iter().map(|p| (p.tag.clone(), p)).collect(),
+            workflows: workflows
+                .iter()
+                .map(Workflow::new)
+                .map(|p| (p.tag.clone(), p))
+                .collect(),
         }
     }
 
     fn process(&self, part: &Part) -> SystemOutcome {
-        let mut current_workflow = START;
+        let mut current_workflow = START.to_string();
         loop {
-            match self.workflows.get(current_workflow).unwrap().process(part) {
+            match self.workflows.get(&current_workflow).unwrap().process(part) {
                 WorkflowOutcome::Accepted => return SystemOutcome::Accepted,
                 WorkflowOutcome::Rejected => return SystemOutcome::Rejected,
-                WorkflowOutcome::Switch(new_workflow) => current_workflow = &new_workflow,
+                WorkflowOutcome::Switch(new_workflow) => current_workflow = new_workflow,
             }
         }
     }
@@ -122,7 +133,7 @@ struct Part {
 impl Part {
     fn new(description: &&str) -> Self {
         let mut coords = description[1..description.len() - 1]
-            .splitn(3, ',')
+            .splitn(4, ',')
             .map(|part| part[2..].parse().unwrap());
 
         Self {
@@ -139,14 +150,10 @@ impl Part {
 }
 
 fn process_all_parts(lines: &[&str]) -> usize {
-    let empty_line = lines
-        .iter()
-        .position(|l| l.is_empty())
-        .expect("there is an empty line");
+    let empty_line = lines.iter().position(|l| l.starts_with('{')).unwrap();
     let (workflows, parts) = (&lines[..empty_line], &lines[empty_line + 1..]);
 
     // parse all pipelines
-    let workflows = workflows.iter().map(Workflow::new).collect::<Vec<_>>();
     let system = System::new(&workflows);
 
     // parse and process the parts
