@@ -1,44 +1,160 @@
-use std::{collections::HashMap, env, fs};
+use std::{collections::HashMap, env, fs, any::Any};
 
-const USAGE: &str = "Incorrect usage!\nUsage: cargo r -- [t|p] [1|2]";
 const START: &str = "in";
 const ACCEPTED: &str = "A";
 const REJECTED: &str = "R";
 
 fn main() {
-    let run_type = env::args().nth(1).expect(USAGE);
-    let number = env::args().nth(2).expect(USAGE);
+    let run_type = env::args().nth(1).unwrap_or_default();
+    let number = env::args().nth(2).unwrap_or_default();
+
     let result = match (run_type.as_str(), number.as_str()) {
         ("t", "1") => part1("test1.txt"),
         ("p", "1") => part1("part1.txt"),
         ("t", "2") => part2("test2.txt"),
         ("p", "2") => part2("part2.txt"),
-        _ => panic!("{USAGE}"),
+        _ => Err("Incorrect usage!\nUsage: cargo r -- [t|p] [1|2]"),
     };
-    println!("Result for {run_type}{number} is {result:?}");
-}
 
-type WorkflowTag = String;
-type Rule = Box<dyn Fn(&Part) -> Option<WorkflowTag>>;
-
-fn create_rule(field: &str, operation: &str, number: usize, tag: WorkflowTag) -> Rule {
-    match (field, operation) {
-        ("x", "<") => Box::new(move |p| (p.x < number).then_some(tag.clone())),
-        ("x", ">") => Box::new(move |p| (p.x > number).then_some(tag.clone())),
-        ("m", "<") => Box::new(move |p| (p.m < number).then_some(tag.clone())),
-        ("m", ">") => Box::new(move |p| (p.m > number).then_some(tag.clone())),
-        ("a", "<") => Box::new(move |p| (p.a < number).then_some(tag.clone())),
-        ("a", ">") => Box::new(move |p| (p.a > number).then_some(tag.clone())),
-        ("s", "<") => Box::new(move |p| (p.s < number).then_some(tag.clone())),
-        ("s", ">") => Box::new(move |p| (p.s > number).then_some(tag.clone())),
-        _ => unreachable!("illegal {field} and {operation}"),
+    match result {
+        Ok(number) => println!("Result for {run_type}{number} is {number:?}"),
+        Err(e) => eprintln!("An error occurred:\n{e}"),
     }
 }
 
-enum WorkflowOutcome {
-    Accepted,
-    Rejected,
-    Switch(WorkflowTag),
+enum Field {
+    X,
+    M,
+    A,
+    S,
+}
+
+struct Part {
+    fields: [usize; 4],
+}
+
+impl Part {
+    fn new(line: &&str) -> Result<Self, &'static str> {
+        // remove { and } from start and end
+        let line = match line.strip_prefix('{') {
+            Some(leading_stripped) => match leading_stripped.strip_suffix('}') {
+                Some(stripped) => stripped,
+                None => return Err("no trailing `}` found in Part"),
+            },
+            None => return Err("no leading `{` found in Part"),
+        };
+
+        // try to parse all 4 fields
+        let fields = line.splitn(4, ',').filter_map(|part| {
+            let num_str = match part.split_once('=') {
+                Some((_, num_str)) => num_str,
+                None => return None,
+            };
+
+            match num_str.parse() {
+                Ok(num) => Some(num),
+                Err(_) => None,
+            }
+        }).collect::<Vec<usize>>();
+
+        // try and convert the vec into an array of length 4
+        let fields: [usize; 4] = match fields.try_into() {
+            Ok(fields) => fields,
+            Err(_) => return Err("Could not parse 4 fields"),
+        };
+
+        Ok(Self { fields })
+    }
+
+    fn get(&self, field: &Field) -> &usize {
+        match field {
+            Field::X => &self.fields[0],
+            Field::M => &self.fields[1],
+            Field::A => &self.fields[2],
+            Field::S => &self.fields[3],
+        }
+    }
+
+    fn score(&self) -> usize {
+        self.fields.iter().sum()
+    }
+}
+
+type WorkflowTag = String;
+
+enum Rule {
+    GreaterThan(Field, usize, WorkflowTag),
+    LessThan(Field, usize, WorkflowTag),
+    Identity(WorkflowTag),
+}
+
+struct Workflow {
+    rules: Vec<Rule>,
+}
+
+impl Workflow {
+    fn new(line: &str) -> Result<Self, &'static str> {
+        let rules = line
+            .split(',')
+            .filter_map(|rule| {
+                // filter out identities
+                if !rule.contains(':') {
+                    return Some(Rule::Identity(rule.to_string()));
+                }
+                
+                // safe because of check above
+                let (rule, tag) = rule.split_once(':').unwrap();
+
+                // get field name
+                let field = match rule.chars().nth(0) {
+                    Some('x') => Field::X,
+                    Some('m') => Field::M,
+                    Some('a') => Field::A,
+                    Some('s') => Field::S,
+                    _ => return None,
+                };
+
+                let number = match rule.get(2..).unwrap_or_default().parse() {
+                    Ok(n) => n,
+                    Err(_)=> return None,
+                };
+
+                match rule.chars().nth(1) {
+                    Some('<') => Some(Rule::LessThan(field, number, tag.to_string())),
+                    Some('>') => Some(Rule::GreaterThan(field, number, tag.to_string())),
+                    _ => None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if rules.is_empty() || !rules.iter().any(|r| match r {
+            Rule::Identity(_) => true,
+            _ => false,
+        }) {
+            Err("Rules are not exhaustive")
+        } else {
+           Ok(Self { rules })
+        }
+    }
+
+    fn process(&self, part: &Part) -> &WorkflowTag {
+        for rule in &self.rules {
+            match rule {
+                Rule::GreaterThan(field, number, tag) => {
+                    if part.get(field) > number {
+                        return tag;
+                    }
+                }
+                Rule::LessThan(field, number, tag) => {
+                    if part.get(field) < number {
+                        return tag;
+                    }
+                }
+                Rule::Identity(tag) => return tag,
+            }
+        }
+        unreachable!("rules are exhaustive")
+    }
 }
 
 enum SystemOutcome {
@@ -46,141 +162,77 @@ enum SystemOutcome {
     Rejected,
 }
 
-struct Workflow {
-    tag: WorkflowTag,
-    rules: Vec<Rule>,
-}
-
-impl Workflow {
-    fn new(desription: &&str) -> Self {
-        let (tag, rules_str) = desription.split_once('{').expect("should find {");
-        let mut rules = rules_str[..rules_str.len() - 1]
-            .split(',')
-            .rev()
-            .skip(1)
-            .map(|rule| {
-                println!("{rule}");
-                let (rule, tag) = rule.split_once(':').expect(": not found");
-                let field = &rule[0..1];
-                let operation = &rule[1..2];
-                let number = rule[2..].parse().unwrap();
-
-                println!("{field} {operation} {number}\n");
-
-                create_rule(field, operation, number, tag.to_string())
-            })
-            .collect::<Vec<_>>();
-
-        let last_tag = rules_str[..rules_str.len() - 1].rsplit_once(',').unwrap().1;
-
-        rules.push(Box::new(move |_| Some(last_tag.to_owned())));
-
-        Self {
-            tag: tag.to_string(),
-            rules,
-        }
-    }
-
-    fn process(&self, part: &Part) -> WorkflowOutcome {
-        for rule in &self.rules {
-            if let Some(result) = rule(part) {
-                match result.as_str() {
-                    ACCEPTED => return WorkflowOutcome::Accepted,
-                    REJECTED => return WorkflowOutcome::Rejected,
-                    _ => return WorkflowOutcome::Switch(result),
-                }
-            }
-        }
-
-        unreachable!("there is always a result")
-    }
-}
-
 struct System {
     workflows: HashMap<WorkflowTag, Workflow>,
 }
 
 impl System {
-    fn new(workflows: &[&str]) -> Self {
-        Self {
-            workflows: workflows
-                .iter()
-                .map(Workflow::new)
-                .map(|p| (p.tag.clone(), p))
-                .collect(),
-        }
+    fn new(workflows: &[&str]) -> Result<Self, &'static str> {
+        let workflows = workflows
+            .iter()
+            .map(|description| {
+                let (tag, rules) = description.split_once('{').expect("should find {");
+                let workflow = Workflow::new(rules.strip_suffix('}').expect("should find }"));
+                (tag.to_string(), workflow)
+            })
+            .collect();
+
+        Self { workflows }
     }
 
     fn process(&self, part: &Part) -> SystemOutcome {
         let mut current_workflow = START.to_string();
         loop {
-            match self.workflows.get(&current_workflow).unwrap().process(part) {
-                WorkflowOutcome::Accepted => return SystemOutcome::Accepted,
-                WorkflowOutcome::Rejected => return SystemOutcome::Rejected,
-                WorkflowOutcome::Switch(new_workflow) => current_workflow = new_workflow,
+            let wf = self.workflows.get(&current_workflow).unwrap();
+            match wf.process(part).as_str() {
+                ACCEPTED => return SystemOutcome::Accepted,
+                REJECTED => return SystemOutcome::Rejected,
+                new_workflow => current_workflow = new_workflow.to_string(),
             }
         }
     }
 }
 
-struct Part {
-    x: usize,
-    m: usize,
-    a: usize,
-    s: usize,
-}
+fn process_all_parts(lines: &[&str]) -> Result<usize, &'static str> {
+    let first_part_line_index = match lines.iter().position(|l| l.starts_with('{')) {
+        Some(position) => position,
+        None => return Err("could not find `{` in lines"),
+    };
+    let (workflows, parts) = lines.split_at(first_part_line_index);
 
-impl Part {
-    fn new(description: &&str) -> Self {
-        let mut coords = description[1..description.len() - 1]
-            .splitn(4, ',')
-            .map(|part| part[2..].parse().unwrap());
+    let system = System::new(workflows);
 
-        Self {
-            x: coords.next().unwrap(),
-            m: coords.next().unwrap(),
-            a: coords.next().unwrap(),
-            s: coords.next().unwrap(),
-        }
-    }
+    let parts = parts .iter() .map(Part::new);
 
-    fn score(&self) -> usize {
-        self.x + self.m + self.a + self.s
-    }
-}
-
-fn process_all_parts(lines: &[&str]) -> usize {
-    let empty_line = lines.iter().position(|l| l.starts_with('{')).unwrap();
-    let (workflows, parts) = (&lines[..empty_line], &lines[empty_line + 1..]);
-
-    // parse all pipelines
-    let system = System::new(&workflows);
-
-    // parse and process the parts
-    parts
-        .iter()
-        .map(Part::new)
         .fold(0, |sum, part| match system.process(&part) {
             SystemOutcome::Accepted => sum + part.score(),
             SystemOutcome::Rejected => sum,
         })
 }
 
-fn part1(filename: &str) -> usize {
-    let file = fs::read_to_string(filename).expect(&format!("the file `{filename}` should exist"));
+fn part1(filename: &str) -> Result<usize, &'static str> {
+    let file = match fs::read_to_string(filename) {
+        Ok(data) => data,
+        Err(_) => return Err("failed to open file"),
+    };
+
     let lines = file.split_whitespace().collect::<Vec<_>>();
 
     process_all_parts(&lines)
 }
 
-fn part2(filename: &str) -> usize {
-    let file = fs::read_to_string(filename).expect(&format!("the file `{filename}` should exist"));
-    0
+fn part2(filename: &str) -> Result<usize, &'static str> {
+    let file = match fs::read_to_string(filename) {
+        Ok(data) => data,
+        Err(_) => return Err("failed to open file"),
+    };
+
+    Ok(0)
 }
 
 #[test]
 fn part1_test() {
-    assert_eq!(19114, part1("test1.txt"));
+    assert_eq!(Ok(19114), part1("test1.txt"));
 }
 
 // #[test]
