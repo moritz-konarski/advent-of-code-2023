@@ -6,8 +6,6 @@ use std::{
 const START: &str = "in";
 const ACCEPTED: &str = "A";
 const REJECTED: &str = "R";
-const MIN_SCORE: u64 = 1;
-const MAX_SCORE: u64 = 4_000;
 
 fn main() {
     let run_type = env::args().nth(1).unwrap_or_default();
@@ -81,32 +79,6 @@ impl Part {
 
     fn score(&self) -> u64 {
         self.fields.iter().sum()
-    }
-}
-
-#[derive(Debug)]
-struct AllParts {
-    fields: [(u64, u64); 4],
-}
-
-impl AllParts {
-    fn new() -> Self {
-        Self {
-            fields: [(MIN_SCORE, MAX_SCORE); 4],
-        }
-    }
-
-    fn get_mut(&mut self, field: &Field) -> &mut (u64, u64) {
-        match field {
-            Field::X => &mut self.fields[0],
-            Field::M => &mut self.fields[1],
-            Field::A => &mut self.fields[2],
-            Field::S => &mut self.fields[3],
-        }
-    }
-
-    fn possibilities(&self) -> u64 {
-        self.fields.iter().map(|(min, max)| max - min + 1).product()
     }
 }
 
@@ -186,30 +158,6 @@ impl Workflow {
             }
         }
         unreachable!("rules are exhaustive")
-    }
-
-    fn count_ways_to_tag(&self, mut part: AllParts, next_tag: &String) -> AllParts {
-        for rule in &self.rules {
-            match rule {
-                Rule::GreaterThan(field, number, tag) => {
-                    if tag == next_tag {
-                        part.get_mut(field).0 = number + 1;
-                    } else {
-                        part.get_mut(field).1 = *number;
-                    }
-                }
-                Rule::LessThan(field, number, tag) => {
-                    if tag == next_tag {
-                        part.get_mut(field).1 = number.saturating_sub(1);
-                    } else {
-                        part.get_mut(field).0 = *number;
-                    }
-                }
-                Rule::Identity(_) => { /* no action required */ }
-            }
-        }
-
-        part
     }
 }
 
@@ -309,26 +257,15 @@ fn calculate_acceptable_combinations(lines: &[&str]) -> Result<u64, &'static str
 
     parts.iter().for_each(|part| _ = system.process(part));
 
-    let mut possible_combinations = vec![];
-
-    system.accepted_pipelines.iter().for_each(|list| {
-        println!("{list:?}");
-        let mut part = AllParts::new();
-        println!("  {:?}", part);
-        let mut w = system.workflows.get(&list[0]).unwrap();
-        for tag in &list[1..] {
-            part = w.count_ways_to(part, tag);
-            println!("  {tag} -> {w:?}");
-            println!("  {:?}", part);
-            possible_combinations.push(part);
-
-            w = system.workflows.get(tag).unwrap();
+    system.accepted_pipelines.iter().for_each(|a| {
+        println!("{a:?}");
+        for x in a {
+            println!("  {:?}", system.workflows.get(x).unwrap());
         }
-        println!("---------");
     });
 
-    // TODO:
-    merge_possible_parts(...)
+    let possible_combinations = 0;
+
     // Ok(parts
     //     .iter()
     //     .fold(0, |sum, part| match system.process(part) {
