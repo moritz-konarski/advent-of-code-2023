@@ -104,10 +104,6 @@ impl AllParts {
             Field::S => &mut self.fields[3],
         }
     }
-
-    fn possibilities(&self) -> u64 {
-        self.fields.iter().map(|(min, max)| max - min + 1).product()
-    }
 }
 
 type WorkflowTag = String;
@@ -188,7 +184,7 @@ impl Workflow {
         unreachable!("rules are exhaustive")
     }
 
-    fn count_ways_to_tag(&self, mut part: AllParts, next_tag: &String) -> AllParts {
+    fn fit_part_through_workflow(&self, mut part: AllParts, next_tag: &String) -> AllParts {
         for rule in &self.rules {
             match rule {
                 Rule::GreaterThan(field, number, tag) => {
@@ -296,6 +292,14 @@ fn part1(filename: &str) -> Result<u64, &'static str> {
     process_all_parts(&lines)
 }
 
+fn merge_passing_pipelines(passing_pargs: &[AllParts]) -> [Vec<(u64, u64)>; 4] {
+    [vec![(0, 0)], vec![(0, 0)], vec![(0, 0)], vec![(0, 0)]]
+}
+
+fn calculate_combinations(merged_part: [Vec<(u64, u64)>; 4]) -> u64 {
+    0
+}
+
 fn calculate_acceptable_combinations(lines: &[&str]) -> Result<u64, &'static str> {
     let first_part_line_index = match lines.iter().position(|l| l.starts_with('{')) {
         Some(position) => position,
@@ -309,34 +313,41 @@ fn calculate_acceptable_combinations(lines: &[&str]) -> Result<u64, &'static str
 
     parts.iter().for_each(|part| _ = system.process(part));
 
-    let mut possible_combinations = vec![];
+    let passing_parts_per_pipeline = system
+        .accepted_pipelines
+        .iter()
+        .inspect(|list| println!("PL: {list:?}"))
+        .map(|list| match list.split_first() {
+            Some((first_tag, remaining_tags)) => match system.workflows.get(first_tag) {
+                Some(mut wf) => remaining_tags
+                    .iter()
+                    .inspect(|t| println!(" Tag: {t}"))
+                    .fold(Ok(AllParts::new()), |part, next_tag| {
+                        match system.workflows.get(next_tag) {
+                            Some(new_wf) => match part {
+                                Ok(p) => {
+                                    let old_wf = wf;
+                                    println!("  {p:?}");
+                                    println!("  {old_wf:?} -> {new_wf:?}");
+                                    wf = new_wf;
+                                    Ok(old_wf.fit_part_through_workflow(p, next_tag))
+                                }
+                                Err(e) => Err(e),
+                            },
+                            None => Err("cannot find remaining tag in accepted pipeline"),
+                        }
+                    }),
+                None => Err("cannot find start workflow"),
+            },
+            None => Err("no workflows in accepted pipeline"),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    system.accepted_pipelines.iter().for_each(|list| {
-        println!("{list:?}");
-        let mut part = AllParts::new();
-        println!("  {:?}", part);
-        let mut w = system.workflows.get(&list[0]).unwrap();
-        for tag in &list[1..] {
-            part = w.count_ways_to(part, tag);
-            println!("  {tag} -> {w:?}");
-            println!("  {:?}", part);
-            possible_combinations.push(part);
+    println!("{passing_parts_per_pipeline:?}");
 
-            w = system.workflows.get(tag).unwrap();
-        }
-        println!("---------");
-    });
+    let merged_part = merge_passing_pipelines(&passing_parts_per_pipeline);
 
-    // TODO:
-    merge_possible_parts(...)
-    // Ok(parts
-    //     .iter()
-    //     .fold(0, |sum, part| match system.process(part) {
-    //         SystemOutcome::Accepted => sum + part.score(),
-    //         SystemOutcome::Rejected => sum,
-    //     }))
-
-    Ok(possible_combinations)
+    Ok(calculate_combinations(merged_part))
 }
 
 fn part2(filename: &str) -> Result<u64, &'static str> {
