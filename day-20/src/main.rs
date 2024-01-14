@@ -1,3 +1,4 @@
+mod modules;
 mod solution;
 mod tests;
 

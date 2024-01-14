@@ -3,8 +3,18 @@
 use crate::solution::{part1, part2};
 
 #[test]
-fn part1_example() {
+fn part1_example_1_small() {
+    assert_eq!(Ok(32), part1("test1.txt", 1));
+}
+
+#[test]
+fn part1_example_1() {
     assert_eq!(Ok(32000000), part1("test1.txt", 1_000));
+}
+
+#[test]
+fn part1_example_2() {
+    assert_eq!(Ok(11687500), part1("test2.txt", 1_000));
 }
 
 // #[test]
