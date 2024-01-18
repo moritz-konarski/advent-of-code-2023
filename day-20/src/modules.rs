@@ -1,28 +1,46 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
-enum Pulse {
+#[derive(Debug)]
+pub struct Message {
+    sender: String,
+    pulse: Pulse,
+    pub receiver: String,
+}
+
+impl Message {
+    pub fn new() -> Self {
+        Self {
+            sender: "".to_string(),
+            pulse: Pulse::Low,
+            receiver: "broadcaster".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Pulse {
     High,
     Low,
 }
 
-enum State {
-    On,
-    Off,
-}
-
 pub trait Module {
-    fn new(line: &str) -> Result<Self, &'static str>;
-    fn receive_pulse(&mut self, pulse: Pulse, from: &String);
-    fn pass_on_pulse(
-        &self,
-        pulse_queue: &mut VecDeque<String>,
-        module_map: &mut BTreeMap<String, Modules>,
-    ) -> Result<(), &'static str>;
+    fn new(line: &str) -> Result<impl Module, &'static str>;
+    fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>);
 }
 
+#[derive(Clone)]
 pub enum Modules {
     FlipFlop(FlipFlopStruct),
     Conjunction(ConjunctionStruct),
+}
+
+impl Modules {
+    pub fn label(&self) -> String {
+        match self {
+            Modules::FlipFlop(s) => s.label.clone(),
+            Modules::Conjunction(s) => s.label.clone(),
+        }
+    }
 }
 
 impl Module for Modules {
@@ -40,21 +58,10 @@ impl Module for Modules {
         }
     }
 
-    fn receive_pulse(&mut self, pulse: Pulse, from: &String) {
+    fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>) {
         match self {
-            Modules::FlipFlop(s) => s.receive_pulse(pulse, from),
-            Modules::Conjunction(s) => s.receive_pulse(pulse, from),
-        }
-    }
-
-    fn pass_on_pulse(
-        &self,
-        pulse_queue: &mut VecDeque<String>,
-        module_map: &mut BTreeMap<String, Modules>,
-    ) {
-        match self {
-            Modules::FlipFlop(s) => s.pass_on_pulse(pulse_queue, module_map),
-            Modules::Conjunction(s) => s.pass_on_pulse(pulse_queue, module_map),
+            Modules::FlipFlop(s) => s.receive_message(msg, msg_queue),
+            Modules::Conjunction(s) => s.receive_message(msg, msg_queue),
         }
     }
 }
@@ -63,38 +70,37 @@ pub struct Broadcaster {
     dest_modules: VecDeque<String>,
 }
 
-impl Broadcaster {
+impl Module for Broadcaster {
     fn new(line: &str) -> Result<Self, &'static str> {
         let destination_str = match line.split_once(" -> ") {
             Some(("broadcaster", dest)) => dest,
             _ => return Err("cannot find broadcaster in line"),
         };
 
-        let dest_modules = destination_str.split(", ").collect::<VecDeque<_>>();
+        let dest_modules = destination_str
+            .split(", ")
+            .map(|s| s.to_string())
+            .collect::<VecDeque<_>>();
 
         Ok(Self { dest_modules })
     }
 
-    fn send_low_pulse(
-        &self,
-        module_map: &mut BTreeMap<String, Modules>,
-    ) -> Result<VecDeque<String>, &'static str> {
+    fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>) {
         for dest in &self.dest_modules {
-            let mut module = match module_map.get_mut(dest) {
-                Some(m) => m,
-                None => return Err("cannot find destination in module map"),
-            };
-            module.receive_pulse(Pulse::Low, "broadcaster");
+            msg_queue.push_back(Message {
+                sender: "broadcaster".to_string(),
+                pulse: msg.pulse,
+                receiver: dest.clone(),
+            })
         }
-
-        Ok(self.dest_modules)
     }
 }
 
-struct FlipFlopStruct {
+#[derive(Clone)]
+pub struct FlipFlopStruct {
     label: String,
-    state: State,
-    dest_modules: VecDeque<String>,
+    state: Pulse,
+    dest_modules: Vec<String>,
 }
 
 impl Module for FlipFlopStruct {
@@ -108,53 +114,44 @@ impl Module for FlipFlopStruct {
             _ => return Err("cannot find -> in flip flop line"),
         };
 
-        let dest_modules = destination_str.split(", ").collect::<VecDeque<_>>();
+        let dest_modules = destination_str
+            .split(", ")
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
 
         Ok(Self {
             label: label.to_string(),
-            state: State::Off,
+            state: Pulse::Low,
             dest_modules,
         })
     }
 
-    fn receive_pulse(&mut self, pulse: Pulse, _from: &String) {
-        match pulse {
+    fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>) {
+        let new_pulse = match msg.pulse {
             Pulse::Low => {
                 self.state = match self.state {
-                    State::On => State::Off,
-                    State::Off => State::On,
-                }
+                    Pulse::High => Pulse::Low,
+                    Pulse::Low => Pulse::High,
+                };
+                self.state
             }
-            Pulse::High => { /* ignore this pulse */ }
-        }
-    }
-
-    fn pass_on_pulse(
-        &self,
-        pulse_queue: &mut VecDeque<String>,
-        module_map: &mut BTreeMap<String, Modules>,
-    ) -> Result<(), &'static str> {
-        let pulse = match self.state {
-            State::On => Pulse::High,
-            State::Off => Pulse::Low,
+            Pulse::High => self.state,
         };
 
         for dest in &self.dest_modules {
-            let mut module = match module_map.get_mut(dest) {
-                Some(m) => m,
-                None => return Err("cannot find destination in module map"),
-            };
-            module.receive_pulse(pulse, &self.label);
-            pulse_queue.push_back(dest);
+            msg_queue.push_back(Message {
+                sender: self.label.clone(),
+                pulse: new_pulse,
+                receiver: dest.clone(),
+            });
         }
-
-        Ok(())
     }
 }
 
-struct ConjunctionStruct {
+#[derive(Clone)]
+pub struct ConjunctionStruct {
     label: String,
-    input_to_state: HashMap<String, State>,
+    input_to_state: HashMap<String, Pulse>,
     dest_modules: Vec<String>,
 }
 
@@ -169,7 +166,10 @@ impl Module for ConjunctionStruct {
             _ => return Err("cannot find -> in conjunction line"),
         };
 
-        let dest_modules = destination_str.split(", ").collect::<VecDeque<_>>();
+        let dest_modules = destination_str
+            .split(", ")
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
 
         Ok(Self {
             label: label.to_string(),
@@ -178,33 +178,28 @@ impl Module for ConjunctionStruct {
         })
     }
 
-    fn receive_pulse(&mut self, pulse: Pulse, from: &String) {
+    fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>) {
         self.input_to_state
-            .entry(from)
-            .and_modify(|e| e = pulse)
-            .or_insert(pulse);
-    }
+            .entry(msg.sender)
+            .and_modify(|e| *e = msg.pulse)
+            .or_insert(msg.pulse);
 
-    fn pass_on_pulse(
-        &self,
-        pulse_queue: &mut VecDeque<String>,
-        module_map: &mut BTreeMap<String, Modules>,
-    ) -> Result<(), &'static str> {
-        let pulse = if self.input_to_state.values().any(|v| v == Pulse::Low) {
+        let new_pulse = if self
+            .input_to_state
+            .values()
+            .any(|v| matches!(v, Pulse::Low))
+        {
             Pulse::High
         } else {
             Pulse::Low
         };
 
         for dest in &self.dest_modules {
-            let mut module = match module_map.get_mut(dest) {
-                Some(m) => m,
-                None => return Err("cannot find destination in module map"),
-            };
-            module.receive_pulse(pulse, &self.label);
-            pulse_queue.push_back(dest);
+            msg_queue.push_back(Message {
+                sender: self.label.clone(),
+                pulse: new_pulse,
+                receiver: dest.clone(),
+            });
         }
-
-        Ok(())
     }
 }
