@@ -1,6 +1,6 @@
-use crate::modules::{Broadcaster, Message, Module, Modules};
+use crate::modules::{Broadcaster, Message, Module, Modules, Pulse};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     fs,
 };
 
@@ -35,20 +35,50 @@ pub fn part1(filename: &str, press_count: u64) -> Result<u64, &'static str> {
     let lines = file.split_terminator('\n').collect::<Vec<_>>();
 
     let (mut broadcaster, mut module_map) = parse_modules(&lines)?;
+    let mut module_set = HashSet::new();
+    module_set.insert(module_map.clone());
 
     let mut msg_queue = VecDeque::new();
-    let start_message = Message::new();
-    println!("{start_message:?}");
-    broadcaster.receive_message(start_message, &mut msg_queue);
 
-    while let Some(message) = msg_queue.pop_front() {
+    broadcaster.receive_message(Message::new(), &mut msg_queue);
+
+    let mut low_count = 1;
+    let mut high_count = 0;
+
+    let periodicity = loop {
+        let message = match msg_queue.pop_front() {
+            Some(m) => m,
+            None => {
+                println!("started over!");
+                broadcaster.receive_message(Message::new(), &mut msg_queue);
+                msg_queue.pop_front().unwrap()
+            }
+        };
+
         println!("{message:?}");
+
+        match message.pulse {
+            Pulse::High => high_count += 1,
+            Pulse::Low => low_count += 1,
+        }
+
         if let Some(module) = module_map.get_mut(&message.receiver) {
             module.receive_message(message, &mut msg_queue);
         }
-    }
 
-    Ok(0)
+        if msg_queue.len() == initial_length {
+            if !module_set.insert(msg_queue.clone()) {
+                break module_set.len();
+            }
+        }
+    };
+
+    println!("period: {periodicity:?}");
+    println!("High: {high_count:?}, Low {low_count:?}");
+
+    let repeats = press_count / (periodicity as u64 + 1);
+    let score = repeats * high_count * repeats * low_count;
+    Ok(score)
 }
 
 pub fn part2(filename: &str, press_count: u64) -> Result<u64, &'static str> {

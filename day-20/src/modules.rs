@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Message {
     sender: String,
-    pulse: Pulse,
+    pub pulse: Pulse,
     pub receiver: String,
 }
 
@@ -17,7 +17,7 @@ impl Message {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub enum Pulse {
     High,
     Low,
@@ -28,7 +28,7 @@ pub trait Module {
     fn receive_message(&mut self, msg: Message, msg_queue: &mut VecDeque<Message>);
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub enum Modules {
     FlipFlop(FlipFlopStruct),
     Conjunction(ConjunctionStruct),
@@ -96,7 +96,7 @@ impl Module for Broadcaster {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct FlipFlopStruct {
     label: String,
     state: Pulse,
@@ -148,7 +148,7 @@ impl Module for FlipFlopStruct {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct ConjunctionStruct {
     label: String,
     input_to_state: HashMap<String, Pulse>,
