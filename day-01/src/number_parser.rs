@@ -24,20 +24,15 @@ impl NumberParser {
     pub fn get_left(&self, line: &'static str) -> Option<u32> {
         line.chars()
             .enumerate()
-            .inspect(|(i, c)| println!("l {i:?} {c}"))
             .find_map(|(i, c)| c.to_digit(10).or_else(|| self.parse(line.get(i..))))
     }
 
     pub fn get_right(&self, line: &'static str) -> Option<u32> {
         let line_len = line.len() - 1;
-        line.chars()
-            .rev()
-            .enumerate()
-            .inspect(|(i, c)| println!("r {i:?} {c}"))
-            .find_map(|(i, c)| {
-                c.to_digit(10)
-                    .or_else(|| self.parse(line.get(line_len - i..)))
-            })
+        line.chars().rev().enumerate().find_map(|(i, c)| {
+            c.to_digit(10)
+                .or_else(|| self.parse(line.get(line_len - i..)))
+        })
     }
 
     const fn get_new_node(letter: char) -> Self {
@@ -50,16 +45,17 @@ impl NumberParser {
 
     fn parse(&self, line: Option<&str>) -> Option<u32> {
         let line = line?;
-        println!("parse {line}");
         let mut node = self;
 
-        // TODO: make map while
-        line.chars().find_map(|c| {
-            node.child_position(c).and_then(|i| {
-                node = &node.children[i];
-                node.digit
+        line.chars()
+            .take(5)
+            .take_while(|c| !c.is_ascii_digit())
+            .find_map(|c| {
+                node.child_position(c).and_then(|i| {
+                    node = &node.children[i];
+                    node.digit
+                })
             })
-        })
     }
 
     fn child_position(&self, letter: char) -> Option<usize> {

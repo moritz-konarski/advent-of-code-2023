@@ -23,12 +23,9 @@ pub fn part2(file: &'static str) -> Result<u64, &'static str> {
 
     let digits = file
         .split_ascii_whitespace()
-        .inspect(|l| print!("{l} "))
         .map(|line| {
             let left = parser.get_left(line);
-            print!("{left:?} ");
             let right = parser.get_right(line);
-            println!("{right:?}");
             match (left, right) {
                 (Some(l), Some(r)) => Ok((l.into(), r.into())),
                 (None, Some(_)) => Err("no left digit found"),
