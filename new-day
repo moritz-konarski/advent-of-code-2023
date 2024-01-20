@@ -1,0 +1,13 @@
+#!/usr/bin/fish
+
+set NAME "day-"$argv[1]
+
+echo "creating "$NAME
+
+cargo new $NAME
+
+cp ./template/src/* ./$NAME/src/
+
+cp ./template/Cargo.toml ./$NAME/Cargo.toml
+
+sed 's/name = "template"/name = "'$NAME'"/g' -i ./$NAME/Cargo.toml
