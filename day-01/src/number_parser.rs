@@ -1,12 +1,14 @@
+use std::collections::HashMap;
+
+#[derive(Default)]
 pub struct NumberParser {
-    letter: char,
     digit: Option<u32>,
-    children: Vec<Self>,
+    children: Option<HashMap<&'static u8, Self>>,
 }
 
 impl NumberParser {
     pub fn new() -> Self {
-        let mut root = Self::get_new_node('0');
+        let mut root = Self::default();
 
         root.add_word("one", 1);
         root.add_word("two", 2);
@@ -22,60 +24,60 @@ impl NumberParser {
     }
 
     pub fn get_left(&self, line: &'static str) -> Option<u32> {
-        line.chars()
-            .enumerate()
-            .find_map(|(i, c)| c.to_digit(10).or_else(|| self.parse(line.get(i..))))
+        line.char_indices()
+            .find_map(|(i, c)| self.parse(c, line.get(i..)))
     }
 
     pub fn get_right(&self, line: &'static str) -> Option<u32> {
-        let line_len = line.len() - 1;
-        line.chars().rev().enumerate().find_map(|(i, c)| {
-            c.to_digit(10)
-                .or_else(|| self.parse(line.get(line_len - i..)))
-        })
+        line.char_indices()
+            .rev()
+            .find_map(|(i, c)| self.parse(c, line.get(i..)))
     }
 
-    const fn get_new_node(letter: char) -> Self {
-        Self {
-            letter,
-            digit: None,
-            children: Vec::new(),
-        }
+    fn parse(&self, c: char, line: Option<&'static str>) -> Option<u32> {
+        c.to_digit(10).or_else(|| self.parse_str(line))
     }
 
-    fn parse(&self, line: Option<&str>) -> Option<u32> {
+    fn parse_str(&self, line: Option<&'static str>) -> Option<u32> {
         let line = line?;
         let mut node = self;
 
-        line.chars()
+        line.as_bytes()
+            .iter()
             .take(5)
             .take_while(|c| !c.is_ascii_digit())
             .find_map(|c| {
-                node.child_position(c).and_then(|i| {
-                    node = &node.children[i];
-                    node.digit
-                })
+                node.children
+                    .as_ref()
+                    .and_then(|map| map.get(&c))
+                    .and_then(|child| {
+                        node = child;
+                        node.digit
+                    })
             })
-    }
-
-    fn child_position(&self, letter: char) -> Option<usize> {
-        self.children.iter().position(|c| c.letter == letter)
     }
 
     fn add_word(&mut self, word: &'static str, digit: u32) {
         let mut node = self;
 
-        for letter in word.chars() {
-            let new_child = Self::get_new_node(letter);
+        for byte in word.as_bytes() {
+            if node.children.is_none() {
+                let mut map = HashMap::with_capacity(4);
+                map.insert(byte, Self::default());
+                node.children = Some(map);
+            } else if let Some(map) = node.children.as_mut() {
+                if !map.contains_key(byte) {
+                    map.insert(byte, Self::default());
+                }
+            }
 
-            let index = if let Some(i) = node.child_position(letter) {
-                i
-            } else {
-                node.children.push(new_child);
-                node.children.len() - 1
-            };
-
-            node = &mut node.children[index];
+            let next_node = node
+                .children
+                .as_mut()
+                .expect("children cannot be none")
+                .get_mut(&byte)
+                .expect("entry cannot be none");
+            node = next_node;
         }
 
         node.digit = Some(digit);
