@@ -9,6 +9,7 @@ const COUNTS: Draw = Draw {
 pub fn part1(file: &'static str) -> Result<u64, &'static str> {
     let games = file
         .split_terminator('\n')
+        .filter(|l| !l.is_empty())
         .map(Game::from_line)
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -22,6 +23,7 @@ pub fn part1(file: &'static str) -> Result<u64, &'static str> {
 pub fn part2(file: &'static str) -> Result<u64, &'static str> {
     let games = file
         .split_terminator('\n')
+        .filter(|l| !l.is_empty())
         .map(Game::from_line)
         .collect::<Result<Vec<_>, _>>()?;
 
