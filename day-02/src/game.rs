@@ -48,24 +48,22 @@ impl Draw {
 
         for v in s.split(", ").map(Self::parse_part) {
             match v {
-                Ok((n, c)) => match c {
+                Some((n, c)) => match c {
                     "red" => red = n,
                     "green" => green = n,
                     "blue" => blue = n,
                     _ => return Err("illegal color value for Draw"),
                 },
-                Err(e) => return Err(e),
+                None => return Err("cannot parse color part"),
             }
         }
 
         Ok(Self { red, green, blue })
     }
 
-    fn parse_part(part: &str) -> Result<(Option<u64>, &str), &'static str> {
-        part.split_once(' ').map_or_else(
-            || Err("no space found in Daw"),
-            |(n, c)| Ok((n.parse().ok(), c)),
-        )
+    fn parse_part(part: &str) -> Option<(Option<u64>, &str)> {
+        part.split_once(' ')
+            .and_then(|(n, c)| Some((n.parse().ok(), c)))
     }
 
     pub fn min(&self, other: &Self) -> Self {
