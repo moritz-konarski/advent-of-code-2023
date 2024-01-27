@@ -1,5 +1,5 @@
 pub struct Game {
-    pub id: u64,
+    pub id: u32,
     draws: Vec<Draw>,
 }
 
@@ -24,101 +24,57 @@ impl Game {
     }
 
     pub fn min_draw(&self) -> Draw {
-        let initial = Draw {
-            red: None,
-            green: None,
-            blue: None,
-        };
-
-        self.draws.iter().fold(initial, |min, d| min.min(d))
+        self.draws.iter().fold(Draw::default(), |min, d| min.min(d))
     }
 }
 
+#[derive(Default)]
 pub struct Draw {
-    pub red: Option<u64>,
-    pub green: Option<u64>,
-    pub blue: Option<u64>,
+    pub red: u32,
+    pub green: u32,
+    pub blue: u32,
 }
 
 impl Draw {
+    pub const fn new(red: u32, green: u32, blue: u32) -> Self {
+        Self { red, green, blue }
+    }
+
     fn from_str(s: &str) -> Result<Self, &'static str> {
-        let mut red = None;
-        let mut green = None;
-        let mut blue = None;
+        let mut red = 0;
+        let mut green = 0;
+        let mut blue = 0;
 
         for v in s.split(", ").map(Self::parse_part) {
             match v {
-                Some((n, c)) => match c {
-                    "red" => red = n,
-                    "green" => green = n,
-                    "blue" => blue = n,
-                    _ => return Err("illegal color value for Draw"),
-                },
-                None => return Err("cannot parse color part"),
+                Some((n, "red")) => red = n,
+                Some((n, "green")) => green = n,
+                Some((n, "blue")) => blue = n,
+                Some(_) => return Err("cannot parse color part"),
+                _ => return Err("cannot parse number part"),
             }
         }
 
         Ok(Self { red, green, blue })
     }
 
-    fn parse_part(part: &str) -> Option<(Option<u64>, &str)> {
+    fn parse_part(part: &str) -> Option<(u32, &str)> {
         part.split_once(' ')
-            .and_then(|(n, c)| Some((n.parse().ok(), c)))
+            .and_then(|(num, col)| num.parse().ok().map(|n| (n, col)))
     }
 
     pub fn min(&self, other: &Self) -> Self {
-        let red = match (self.red, other.red) {
-            (Some(r), Some(o)) => Some(r.max(o)),
-            (Some(r), None) => Some(r),
-            (None, Some(o)) => Some(o),
-            _ => None,
-        };
-
-        let green = match (self.green, other.green) {
-            (Some(g), Some(o)) => Some(g.max(o)),
-            (Some(g), None) => Some(g),
-            (None, Some(o)) => Some(o),
-            _ => None,
-        };
-
-        let blue = match (self.blue, other.blue) {
-            (Some(b), Some(o)) => Some(b.max(o)),
-            (Some(b), None) => Some(b),
-            (None, Some(o)) => Some(o),
-            _ => None,
-        };
-
+        let red = self.red.max(other.red);
+        let green = self.green.max(other.green);
+        let blue = self.blue.max(other.blue);
         Self { red, green, blue }
     }
 
-    pub const fn pow(&self) -> Option<u64> {
-        match (self.red, self.green, self.blue) {
-            (Some(r), Some(g), Some(b)) => Some(r * g * b),
-            (None, Some(g), Some(b)) => Some(g * b),
-            (Some(r), None, Some(b)) => Some(r * b),
-            (Some(r), Some(g), None) => Some(r * g),
-            (Some(r), _, _) => Some(r),
-            (_, Some(g), _) => Some(g),
-            (_, _, Some(b)) => Some(b),
-            _ => None,
-        }
+    pub fn pow(&self) -> u32 {
+        self.red.max(1) * self.green.max(1) * self.blue.max(1)
     }
 
-    const fn is_legal(&self, other: &Self) -> bool {
-        match (self.red, other.red) {
-            (Some(r), Some(o)) if r > o => return false,
-            _ => { /* not a false result */ }
-        }
-
-        match (self.green, other.green) {
-            (Some(g), Some(o)) if g > o => return false,
-            _ => { /* not a false result */ }
-        }
-
-        match (self.blue, other.blue) {
-            (Some(b), Some(o)) if b > o => return false,
-            _ => { /* not a false result */ }
-        }
-        true
+    const fn is_legal(&self, o: &Self) -> bool {
+        self.red <= o.red && self.green <= o.green && self.blue <= o.blue
     }
 }
