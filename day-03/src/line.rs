@@ -24,6 +24,7 @@ impl Number {
 
     fn new(parts: &&[(usize, char)]) -> Result<Self, &'static str> {
         let range = match (parts.first(), parts.last()) {
+            #[allow(clippy::range_plus_one)]
             (Some((f, _)), Some((l, _))) => (*f)..(*l + 1),
             _ => return Err("no first and last in number"),
         };
