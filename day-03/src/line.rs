@@ -5,21 +5,32 @@ struct Number {
 }
 
 impl Number {
+    fn from_vec(parts: &[(usize, char)]) -> Result<Vec<Self>, &'static str> {
+        let mut last_i = 0;
+        let mut sections: Vec<_> = parts
+            .windows(2)
+            .enumerate()
+            .filter_map(|(i, w)| (w[1].0 - w[0].0 != 1).then_some(i))
+            .map(|i| {
+                let t = last_i;
+                last_i = i + 1;
+                &parts[t..i + 1]
+            })
+            .collect();
+        sections.push(&parts[last_i..]);
+
+        sections.iter().map(Self::new).collect()
+    }
+
     fn new(parts: &&[(usize, char)]) -> Result<Self, &'static str> {
         let range = match (parts.first(), parts.last()) {
             (Some((f, _)), Some((l, _))) => *f..*l + 1,
             _ => return Err("no first and last in number"),
         };
 
-        match parts
-            .iter()
-            .map(|(_, c)| c)
-            .collect::<String>()
-            .parse()
-            .ok()
-        {
-            Some(val) => Ok(Self { val, range }),
-            None => Err("count not parse number from line"),
+        match parts.iter().map(|(_, c)| c).collect::<String>().parse() {
+            Ok(val) => Ok(Self { val, range }),
+            Err(_) => Err("count not parse number from line"),
         }
     }
 }
@@ -32,13 +43,16 @@ struct Symbol {
 }
 
 impl Symbol {
+    fn from_vec(pairs: &[(usize, char)]) -> Result<Vec<Self>, &'static str> {
+        pairs.iter().map(Self::new).collect()
+    }
+
     fn new(pair: &(usize, char)) -> Result<Self, &'static str> {
-        let (i, c) = pair;
-        match c {
+        match pair.1 {
             '.' => Err("period found at this index"),
             val if val.is_ascii_punctuation() => Ok(Self {
-                val: *val,
-                index: *i,
+                val,
+                index: pair.0,
                 adjacent_nums: None,
             }),
             _ => Err("no symbol found at this index"),
@@ -72,38 +86,28 @@ pub struct Line {
 
 impl Line {
     pub fn new(line: &'static str) -> Result<Self, &'static str> {
-        let enumerate_chars = line.char_indices().collect::<Vec<_>>();
-        // TODO: map out nums and syms not separated by .
-        let (numbers, symbols): (Vec<_>, Vec<_>) = enumerate_chars
-            .split(|(_, c)| *c == '.')
-            .filter(|v| !v.is_empty())
-            .partition(|v| v[0].1.is_ascii_digit());
+        let (numbers, symbols): (Vec<_>, Vec<_>) = line
+            .char_indices()
+            .filter(|(_, c)| *c != '.')
+            .partition(|(_, c)| c.is_ascii_digit());
 
         let numbers = if numbers.is_empty() {
             None
         } else {
-            Some(
-                numbers
-                    .iter()
-                    .inspect(|v| println!("{v:?}"))
-                    .map(Number::new)
-                    .collect::<Result<_, _>>()?,
-            )
+            Some(Number::from_vec(&numbers)?)
         };
 
         let symbols = if symbols.is_empty() {
             None
         } else {
-            Some(
-                symbols
-                    .iter()
-                    .map_while(|v| v.last())
-                    .map(Symbol::new)
-                    .collect::<Result<_, _>>()?,
-            )
+            Some(Symbol::from_vec(&symbols)?)
         };
 
-        Ok(Self { numbers, symbols })
+        // Ok(Self { numbers, symbols })
+        Ok(Self {
+            numbers,
+            symbols: None,
+        })
     }
 }
 

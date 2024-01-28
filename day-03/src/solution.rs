@@ -5,6 +5,7 @@ pub fn part1(file: &'static str) -> Result<u64, &'static str> {
         .inspect(|l| println!("{l}"))
         .map(Line::new)
         .for_each(|l| println!("{l:?}"));
+
     Ok(0)
 }
 
