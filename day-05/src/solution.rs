@@ -1,7 +1,9 @@
-pub fn part1(file: &'static str) -> Result<u64, &'static str> {
-    let mut lines = file.lines();
+use crate::parse::{get_map, get_seeds};
 
-    let seed_list = get_seeds(&mut lines)?;
+pub fn part1(file: &'static str) -> Result<u64, &'static str> {
+    let (seeds, mappings) = file.split_once('\n').ok_or("cannot find seed line")?;
+
+    let seed_list = get_seeds(seeds)?;
     let map = get_map(&mut lines)?;
 
     let mut minima = Vec::new();

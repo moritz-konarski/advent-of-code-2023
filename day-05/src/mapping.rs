@@ -1,9 +1,18 @@
+use std::collections::BTreeMap;
+
 pub struct Mapping {
     src: std::ops::Range<usize>,
     dst: usize,
 }
 
 impl Mapping {
+    pub const fn new_single_seed(src: usize) -> Self {
+        Self {
+            src: (src..=src),
+            dst: src,
+        }
+    }
+
     const fn new(src: usize, dst: usize, len: usize) -> Self {
         Self {
             src: (src..src + len),
@@ -20,7 +29,7 @@ impl Mapping {
     }
 }
 
-struct MapSet {
+pub struct MapSet {
     mappings: Vec<BTreeMap<usize, Mapping>>,
 }
 

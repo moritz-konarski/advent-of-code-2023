@@ -1,6 +1,6 @@
-use crate::mapping::Mapping;
+use crate::mapping::{Mapping, MapSet};
 
-fn get_seeds(line: &'static str) -> Result<Vec<Mapping>, &'static str> {
+pub fn get_seeds(line: &'static str) -> Result<Vec<Mapping>, &'static str> {
     let (_, seeds) = line.split_once(':').ok_or("cannot split by :")?;
 
     seeds
@@ -8,13 +8,13 @@ fn get_seeds(line: &'static str) -> Result<Vec<Mapping>, &'static str> {
         .map(|s| {
             s.parse().map_or_else(
                 |_| Err("cannot parse seed"),
-                |seed| Mapping::new(seed, seed, 1),
+                |seed| Ok(Mapping::new_single_seed(seed)),
             )
         })
         .collect()
 }
 
-fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<Mapping> {
+pub fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<Mapping> {
     let (_, seeds) = line.split_once(':').ok_or("cannot split by :")?;
 
     seeds
@@ -40,7 +40,7 @@ fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<Mapping> {
         .collect()
 }
 
-fn get_map(lines: &mut Lines<BufReader<File>>) -> MapSet {
+pub fn get_map(lines: &'static str) -> MapSet {
     let mut map = MapSet::new();
 
     while let Some(Ok(mut line)) = lines.next() {
