@@ -1,17 +1,13 @@
 use crate::mapping::{Mapping, MapSet};
 
-pub fn get_seeds(line: &'static str) -> Result<Vec<Mapping>, &'static str> {
+pub fn get_seeds(line: &'static str) -> Result<Vec<i64>, &'static str> {
     let (_, seeds) = line.split_once(':').ok_or("cannot split by :")?;
 
     seeds
         .split_whitespace()
-        .map(|s| {
-            s.parse().map_or_else(
-                |_| Err("cannot parse seed"),
-                |seed| Ok(Mapping::new_single_seed(seed)),
-            )
-        })
-        .collect()
+        .map(|s| 
+            s.parse().map_err(|_| Err("cannot parse seed"))
+        ) .collect()
 }
 
 pub fn get_range_seeds(lines: &mut Lines<BufReader<File>>) -> Vec<Mapping> {
