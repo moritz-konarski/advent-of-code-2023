@@ -1,6 +1,6 @@
-use std::{collections::BTreeMap};
+use std::collections::BTreeMap;
 
-#[derive(Hash, Clone, Copy)]
+#[derive(Debug, Hash, Clone, Copy)]
 pub struct Mapping {
     start: i64,
     end: i64,
@@ -16,137 +16,157 @@ impl Mapping {
         }
     }
 
-    pub const fn new(start: i64, len: i64, destination: i64) -> Self {
-        Self {
-            start,
-            end: start + len,
-            offset: destination - start,
+    pub const fn new(start: i64, len: i64, destination: i64) -> Result<Self, &'static str> {
+        let end = start + len;
+        let offset = destination - start;
+
+        Self::init(start, end, offset)
+    }
+
+    const fn init(start: i64, end: i64, offset: i64) -> Result<Self, &'static str> {
+        if end <= start {
+            Err("Mapping must have positive length")
+        } else {
+            Ok(Self { start, end, offset })
         }
     }
 
-    pub const fn map(&self, seed: &i64) -> i64{
+    pub fn from_str(line: &'static str) -> Result<Self, &'static str> {
+        let (dest, rest) = line
+            .split_once(' ')
+            .ok_or("Cannot find map destination range")?;
+        let (start, len) = rest
+            .split_once(' ')
+            .ok_or("Cannot find map source or length")?;
+
+        let dest = dest
+            .parse::<i64>()
+            .map_err(|_| "Could not parse map destination")?;
+        let start = start
+            .parse::<i64>()
+            .map_err(|_| "Could not parse map start")?;
+        let len = len
+            .parse::<i64>()
+            .map_err(|_| "Could not parse map length")?;
+
+        Self::new(start, len, dest)
+    }
+
+    pub fn map(&self, seed: &i64) -> i64 {
         self.offset + seed
     }
 
+    pub const fn is_before(&self, other: &Self) -> bool {
+        self.end <= other.start
+    }
+
+    pub const fn is_after(&self, other: &Self) -> bool {
+        self.start >= other.end
+    }
+
+    pub const fn contains(&self, other: &Self) -> bool {
+        self.start < other.start && self.end > other.end
+    }
+
     pub const fn overlaps(&self, other: &Self) -> bool {
-        self.start >= other.start && self.start < other.end || self.end <= other.end && self.end > other.start
+        self.start >= other.start && self.start < other.end
+            || self.end <= other.end && self.end > other.start
     }
 
-    pub const fn is_contained_in(&self, other: &Self) -> bool {
-        other.start <= self.start && other.end >= self.end
+    pub fn split_around(self, other: &Self) -> Result<(Self, Self), &'static str> {
+        let left_part = Self::init(self.start, other.start, self.offset)?;
+        let right_part = Self::init(other.end, self.end, self.offset)?;
+
+        Ok((left_part, right_part))
     }
 
-    pub fn split(&self, other: &Self) -> (Self,Self) {
-        let new_mapping = Self::new(other.end, self.end - other.end, self.offset);
-        let mut new_self = self.clone();
-        new_self.end = other.start - 1;
-
-        (new_self, new_mapping)
-    }
-
-    pub fn shrink(&self, other: &Self) -> Self {
-        let mut new_self = self.clone();
-
+    pub fn shrink_around(self, other: &Self) -> Result<Self, &'static str> {
         if other.start <= self.start {
-            new_self.start = other.end;
+            Self::init(other.end, self.end, self.offset)
         } else {
-            new_self.end = other.start - 1;            
+            Self::init(self.end, other.start, self.offset)
         }
-
-        new_self
     }
 }
 
+#[derive(Debug)]
 pub struct MapSet {
     mappings: BTreeMap<i64, Mapping>,
 }
 
 impl MapSet {
+    pub fn from_mappings(mappings: Vec<Mapping>) -> Result<Self, &'static str> {
+        let mut ms = Self::new();
+        println!("{ms:?}\n");
+
+        for m in mappings {
+            ms.add_mapping(m)?;
+            println!("{m:?}");
+            println!("{ms:?}\n");
+        }
+
+        Ok(ms)
+    }
+
     pub fn new() -> Self {
         let mut mappings = BTreeMap::new();
         let map = Mapping::default();
         mappings.insert(map.end, map);
 
-        Self { mappings  }
+        Self { mappings }
     }
 
-    pub fn map(&self, seed: &i64) ->Option< i64> {
-        self.mappings.iter().find(|(k, _)| seed < k).map(|(_, v)| v.map(seed))
-    }
-
-    pub fn add_map(&mut self, other: Mapping) {
-        let mut affected_maps = vec![];
+    pub fn add_mapping(&mut self, other: Mapping) -> Result<(), &'static str> {
+        let mut affected_keys = vec![];
 
         for (key, mapping) in self.mappings.iter() {
-            if other.end < mapping.start {
-                continue; // no contact
+            if mapping.is_before(&other) {
+                continue;
             }
-            if mapping.start >= other.end {
-                break; // no contact
-            } 
-            
-            if other.overlaps(mapping) {
-                affected_maps.push((key, mapping));
+            if mapping.is_after(&other) {
+                break;
+            }
+            if mapping.overlaps(&other) {
+                affected_keys.push(*key);
             }
         }
 
-        for (key, mapping) in affected_maps {
-            if other.is_contained_in(&mapping) {
-                self.mappings.remove(key);
-                let (left, right) = mapping.split(&other);
+        for key in &affected_keys {
+            // remove old map for processing
+            let old_map = self
+                .mappings
+                .remove(key)
+                .ok_or("Could not find key in map")?;
+
+            // handle case where new map is inside one current map
+            if old_map.contains(&other) {
+                println!("containment:\n container: {old_map:?}\n contained: {other:?}");
+                let (left, right) = old_map.split_around(&other)?;
                 self.mappings.insert(left.end, left);
                 self.mappings.insert(right.end, right);
                 break;
             }
 
-            if mapping.is_contained_in(&other) {
-                self.mappings.remove(key);
-            } else {
-                let shrunk = mapping.shrink(&other);
-                if shrunk.end == mapping.end {
-                    self.mappings.remove(key);
-                }
-                self.mappings.insert(shrunk.end, shrunk);
-            }
+            // handle case where new key usurps part of current key
+            let shrunk_map = old_map.shrink_around(&other)?;
+            println!("shrinkage:\n old: {old_map:?}\n new: {other:?}\n shrunk: {shrunk_map:?}");
+            self.mappings.insert(shrunk_map.end, shrunk_map);
         }
+
+        // insert new key
         self.mappings.insert(other.end, other);
+
+        Ok(())
     }
 
-    fn parse_line(&mut self, line: &str) {
-        let elements: Vec<usize> = line.splitn(3, ' ').map(|s| s.parse().unwrap()).collect();
-        let dest_start = elements[0];
-        let source_start = elements[1];
-        let length = elements[2];
-
-        let len = &self.mappings.len() - 1;
-        let map = Mapping::new(source_start, dest_start, length);
-
-        self.mappings[len].insert(source_start, map);
+    pub fn map_seed(&self, seed: &i64) -> Option<i64> {
+        self.mappings
+            .iter()
+            .find(|(k, _)| seed < k)
+            .map(|(_, v)| v.map(seed))
     }
 
-    fn map_individual(&self, seed: &usize) -> usize {
-        let new_seed
-        for map in &self.mappings {
-            seeds.par_iter_mut().for_each(|num| {
-                if let Some(found_mapping) = map.values().find(|mapping| mapping.contains(num)) {
-                    *num = found_mapping.map(num);
-                }
-            })
-        }
-
-        seeds
+    pub fn map_seed_range(&self, seed_range: Mapping) -> Vec<usize> {
+        todo!()
     }
-
-fn map_ranges(&self, seed_range: Mapping) -> Vec<usize> {
-        let mut seeds: Vec<usize> = seed_mapping.src.collect();
-
-        for map in &self.mappings {
-            seeds.par_iter_mut().for_each(|num| {
-                if let Some(found_mapping) = map.values().find(|mapping| mapping.contains(num)) {
-                    *num = found_mapping.map(num);
-                }
-            })
-        }
-
-        seeds
-    }}
+}
