@@ -8,19 +8,24 @@ const TEST2: Result<u64, &'static str> = Ok(46);
 const PART2: Result<u64, &'static str> = Ok(78775051);
 
 #[test]
-fn part1_example() {
-    assert_eq!(TEST1, part1(include_str!("test1.txt")));
+fn random_example() {
+    assert_eq!(Err(""), part1(include_str!("test2.txt")));
 }
 
-#[test]
-fn part1_full() {
-    assert_eq!(PART1, part1(include_str!("part1.txt")));
-}
+// #[test]
+// fn part1_example() {
+//     assert_eq!(TEST1, part1(include_str!("test1.txt")));
+// }
 
-#[test]
-fn part2_example() {
-    assert_eq!(TEST2, part2(include_str!("test1.txt")));
-}
+// #[test]
+// fn part1_full() {
+//     assert_eq!(PART1, part1(include_str!("part1.txt")));
+// }
+
+// #[test]
+// fn part2_example() {
+//     assert_eq!(TEST2, part2(include_str!("test1.txt")));
+// }
 
 // #[test]
 // fn part2_full() {

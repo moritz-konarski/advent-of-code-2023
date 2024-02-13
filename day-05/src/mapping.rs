@@ -31,6 +31,18 @@ impl Mapping {
         }
     }
 
+    fn split_at(self, point: i64) -> Result<(Self, Self), &'static str> {
+        if point < self.start || point >= self.end {
+            println!("trying to split {self:?} at {point:?}");
+            Err("point does not split self")
+        } else {
+            let left_part = Self::init(self.start, point, self.offset)?;
+            let right_part = Self::init(point, self.end, self.offset)?;
+
+            Ok((left_part, right_part))
+        }
+    }
+
     pub fn from_str(line: &'static str) -> Result<Self, &'static str> {
         let (dest, rest) = line
             .split_once(' ')
@@ -65,12 +77,7 @@ impl Mapping {
     }
 
     pub const fn contains(&self, other: &Self) -> bool {
-        self.start < other.start && self.end > other.end
-    }
-
-    pub const fn overlaps(&self, other: &Self) -> bool {
-        self.start >= other.start && self.start < other.end
-            || self.end <= other.end && self.end > other.start
+        self.start <= other.start && self.end >= other.end
     }
 
     pub fn split_around(self, other: &Self) -> Result<(Self, Self), &'static str> {
@@ -80,11 +87,16 @@ impl Mapping {
         Ok((left_part, right_part))
     }
 
+    // TODO
     pub fn shrink_around(self, other: &Self) -> Result<Self, &'static str> {
         if other.start <= self.start {
+            //     |--self--|
+            // |--other--|
             Self::init(other.end, self.end, self.offset)
         } else {
-            Self::init(self.end, other.start, self.offset)
+            // |--self--|
+            //     |--other--|
+            Self::init(self.start, other.start, self.offset)
         }
     }
 }
@@ -116,20 +128,26 @@ impl MapSet {
         Self { mappings }
     }
 
-    pub fn add_mapping(&mut self, other: Mapping) -> Result<(), &'static str> {
+    fn find_overlapping_keys(&self, other: &Mapping) -> Vec<i64> {
         let mut affected_keys = vec![];
-
         for (key, mapping) in self.mappings.iter() {
+            println!("checking {key:?}-{mapping:?}");
             if mapping.is_before(&other) {
+                println!("mapping before new");
                 continue;
             }
             if mapping.is_after(&other) {
+                println!("mapping after new");
                 break;
             }
-            if mapping.overlaps(&other) {
-                affected_keys.push(*key);
-            }
+            println!("mapping affected");
+            affected_keys.push(*key);
         }
+        affected_keys
+    }
+
+    pub fn add_mapping(&mut self, other: Mapping) -> Result<(), &'static str> {
+        let affected_keys = self.find_overlapping_keys(&other);
 
         for key in &affected_keys {
             // remove old map for processing
@@ -166,7 +184,33 @@ impl MapSet {
             .map(|(_, v)| v.map(seed))
     }
 
-    pub fn map_seed_range(&self, seed_range: Mapping) -> Vec<usize> {
-        todo!()
+    pub fn map_mapping(&self, mut seed_range: Mapping) -> Result<Vec<Mapping>, &'static str> {
+        let affected_keys = self.find_overlapping_keys(&seed_range);
+        let mut resulting_mappings = vec![];
+
+        for key in &affected_keys {
+            let current_map = self.mappings.get(key).ok_or("Could not find key in map")?;
+
+            if current_map.contains(&seed_range) {
+                println!("containment:\n container: {current_map:?}\n contained: {seed_range:?}");
+                let new_start = current_map.map(&seed_range.start);
+                let new_end = current_map.map(&seed_range.end);
+                resulting_mappings.push(Mapping::init(new_start, new_end, seed_range.offset)?);
+                break;
+            }
+
+            println!("we are partially contained");
+            if current_map.start <= seed_range.start {
+                let (left, right) = seed_range.split_at(current_map.end)?;
+                seed_range = right;
+                let new_start = current_map.map(&left.start);
+                let new_end = current_map.map(&left.end);
+                resulting_mappings.push(Mapping::init(new_start, new_end, left.offset)?);
+            } else {
+                return Err("reached seed range starting before current map");
+            }
+        }
+
+        Ok(resulting_mappings)
     }
 }
