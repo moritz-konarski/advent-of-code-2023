@@ -38,11 +38,21 @@ pub fn get_range_seeds(line: &'static str) -> Result<Vec<Mapping>, &'static str>
 }
 
 pub fn get_mapset(lines: &'static str) -> Result<MapSet, &'static str> {
-    let mappings = lines
-        .lines()
-        .filter(|line| !line.is_empty() && !line.ends_with(':'))
-        .map(|line| Mapping::from_str(line))
-        .collect::<Result<_, _>>()?;
+    let lines = lines.lines().filter(|l| !l.is_empty()).collect::<Vec<_>>();
 
-    MapSet::from_mappings(mappings)
+    let maps = lines
+        .split(|l| l.ends_with(':'))
+        .map(|s| {
+            s.iter()
+                .map(|line| Mapping::from_str(line))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut ms = MapSet::new();
+    for map in &maps {
+        println!("mapping maps {map:?}");
+        ms.add_mappings(map)?;
+    }
+    Ok(ms)
 }

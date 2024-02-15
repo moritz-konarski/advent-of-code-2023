@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, hash::Hash};
 
 #[derive(Debug, Hash, Clone, Copy)]
 pub struct Mapping {
@@ -19,7 +19,6 @@ impl Mapping {
     pub const fn new(start: i64, len: i64, destination: i64) -> Result<Self, &'static str> {
         let end = start + len;
         let offset = destination - start;
-
         Self::init(start, end, offset)
     }
 
@@ -44,22 +43,11 @@ impl Mapping {
     }
 
     pub fn from_str(line: &'static str) -> Result<Self, &'static str> {
-        let (dest, rest) = line
-            .split_once(' ')
-            .ok_or("Cannot find map destination range")?;
-        let (start, len) = rest
-            .split_once(' ')
-            .ok_or("Cannot find map source or length")?;
+        let mut parts = line.splitn(3, ' ').map_while(|e| e.parse().ok());
 
-        let dest = dest
-            .parse::<i64>()
-            .map_err(|_| "Could not parse map destination")?;
-        let start = start
-            .parse::<i64>()
-            .map_err(|_| "Could not parse map start")?;
-        let len = len
-            .parse::<i64>()
-            .map_err(|_| "Could not parse map length")?;
+        let dest = parts.next().ok_or("Failed map destination parse")?;
+        let start = parts.next().ok_or("Failed map start parse")?;
+        let len = parts.next().ok_or("Failed map length parse")?;
 
         Self::new(start, len, dest)
     }
@@ -107,47 +95,48 @@ pub struct MapSet {
 }
 
 impl MapSet {
-    pub fn from_mappings(mappings: Vec<Mapping>) -> Result<Self, &'static str> {
-        let mut ms = Self::new();
-        println!("{ms:?}\n");
-
-        for m in mappings {
-            ms.add_mapping(m)?;
-            println!("{m:?}");
-            println!("{ms:?}\n");
+    pub fn new() -> Self {
+        let map = Mapping::default();
+        Self {
+            mappings: BTreeMap::from([(map.end, map)]),
         }
-
-        Ok(ms)
     }
 
-    pub fn new() -> Self {
-        let mut mappings = BTreeMap::new();
-        let map = Mapping::default();
-        mappings.insert(map.end, map);
+    pub fn add_mappings(&mut self, mappings: &[Mapping]) -> Result<(), &'static str> {
+        let mappings = mappings
+            .iter()
+            // .inspect(|m| println!("adding {m:?}"))
+            .map(|m| self.map_mapping(m))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        Self { mappings }
+        for m in mappings.iter().flatten() {
+            self.add_mapping(m)?;
+        }
+        Ok(())
     }
 
     fn find_overlapping_keys(&self, other: &Mapping) -> Vec<i64> {
         let mut affected_keys = vec![];
+
         for (key, mapping) in self.mappings.iter() {
-            println!("checking {key:?}-{mapping:?}");
+            // println!("checking k:{key:?} v:{mapping:?}");
             if mapping.is_before(&other) {
-                println!("mapping before new");
+                // println!("mapping before new");
                 continue;
             }
             if mapping.is_after(&other) {
-                println!("mapping after new");
+                // println!("mapping after new");
                 break;
             }
-            println!("mapping affected");
+            // println!("mapping affected");
             affected_keys.push(*key);
         }
+
         affected_keys
     }
 
-    pub fn add_mapping(&mut self, other: Mapping) -> Result<(), &'static str> {
-        let affected_keys = self.find_overlapping_keys(&other);
+    pub fn add_mapping(&mut self, other: &Mapping) -> Result<(), &'static str> {
+        let affected_keys = self.find_overlapping_keys(other);
 
         for key in &affected_keys {
             // remove old map for processing
@@ -157,22 +146,22 @@ impl MapSet {
                 .ok_or("Could not find key in map")?;
 
             // handle case where new map is inside one current map
-            if old_map.contains(&other) {
-                println!("containment:\n container: {old_map:?}\n contained: {other:?}");
-                let (left, right) = old_map.split_around(&other)?;
+            if old_map.contains(other) {
+                println!("containment:\n {other:?}\n in {old_map:?}");
+                let (left, right) = old_map.split_around(other)?;
                 self.mappings.insert(left.end, left);
                 self.mappings.insert(right.end, right);
                 break;
             }
 
             // handle case where new key usurps part of current key
-            let shrunk_map = old_map.shrink_around(&other)?;
-            println!("shrinkage:\n old: {old_map:?}\n new: {other:?}\n shrunk: {shrunk_map:?}");
+            let shrunk_map = old_map.shrink_around(other)?;
+            // println!("shrinkage:\n old: {old_map:?}\n new: {other:?}\n shrunk: {shrunk_map:?}");
             self.mappings.insert(shrunk_map.end, shrunk_map);
         }
 
         // insert new key
-        self.mappings.insert(other.end, other);
+        self.mappings.insert(other.end, *other);
 
         Ok(())
     }
@@ -184,7 +173,8 @@ impl MapSet {
             .map(|(_, v)| v.map(seed))
     }
 
-    pub fn map_mapping(&self, mut seed_range: Mapping) -> Result<Vec<Mapping>, &'static str> {
+    pub fn map_mapping(&self, seed_range: &Mapping) -> Result<Vec<Mapping>, &'static str> {
+        let mut seed_range = *seed_range;
         let affected_keys = self.find_overlapping_keys(&seed_range);
         let mut resulting_mappings = vec![];
 
@@ -192,9 +182,10 @@ impl MapSet {
             let current_map = self.mappings.get(key).ok_or("Could not find key in map")?;
 
             if current_map.contains(&seed_range) {
-                println!("containment:\n container: {current_map:?}\n contained: {seed_range:?}");
+                println!("containment:\n {seed_range:?}\n in {current_map:?}");
                 let new_start = current_map.map(&seed_range.start);
                 let new_end = current_map.map(&seed_range.end);
+                println!("mapped to: {new_start:?} - {new_end:?}");
                 resulting_mappings.push(Mapping::init(new_start, new_end, seed_range.offset)?);
                 break;
             }
