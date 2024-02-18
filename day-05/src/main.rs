@@ -1,5 +1,5 @@
 mod mapping;
-mod parse;
+mod mapset;
 mod solution;
 mod tests;
 
